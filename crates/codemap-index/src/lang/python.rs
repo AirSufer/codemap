@@ -165,8 +165,16 @@ fn walk(
                                     if let Some(cls) = bindings.get(t) {
                                         callee = format!("{cls}.{attr}");
                                         true
+                                    } else if t == "self" || t == "cls" {
+                                        // Qualify with the enclosing class so the
+                                        // callee does not collide with every other
+                                        // method of the same bare name in the repo.
+                                        if let Some(c) = class {
+                                            callee = format!("{c}.{attr}");
+                                        }
+                                        true
                                     } else {
-                                        t == "self" || t == "cls" || imports.contains(t)
+                                        imports.contains(t)
                                     }
                                 }
                                 _ => false,

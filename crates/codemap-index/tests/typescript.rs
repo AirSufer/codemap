@@ -45,7 +45,7 @@ fn this_and_imported_receivers_resolve_and_new_bindings_qualify() {
     assert!(
         f.calls
             .iter()
-            .find(|c| c.callee == "finish")
+            .find(|c| c.callee.ends_with("finish"))
             .unwrap()
             .resolvable
     );

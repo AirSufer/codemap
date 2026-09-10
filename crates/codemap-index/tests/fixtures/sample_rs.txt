@@ -1,0 +1,16 @@
+use axum::{routing::post, Router};
+
+pub struct ChatService;
+
+impl ChatService {
+    pub async fn stream(&self) -> String {
+        self.finish()
+    }
+    fn finish(&self) -> String { String::new() }
+}
+
+pub fn app() -> Router {
+    Router::new().route("/chat/stream", post(handler))
+}
+
+async fn handler() -> String { String::new() }

@@ -17,8 +17,7 @@ fn main() {
             let t = &src[n.byte_range()];
             let t = t.lines().next().unwrap_or("");
             let t: String = t.chars().take(46).collect();
-            let field = n.parent().and_then(|_| None::<&str>).unwrap_or("");
-            println!("{}{}{}  |{}", "  ".repeat(d), n.kind(), field, t);
+            println!("{}{}  |{}", "  ".repeat(d), n.kind(), t);
         }
         let mut c = n.walk();
         for ch in n.children(&mut c) {

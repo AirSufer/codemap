@@ -1,5 +1,8 @@
 use crate::extractor::LanguageExtractor;
+use crate::lang::go::GoExtractor;
 use crate::lang::python::PythonExtractor;
+use crate::lang::rust_lang::RustExtractor;
+use crate::lang::typescript::TypeScriptExtractor;
 use crate::walker::walk_repo;
 use codemap_graph::{EdgeKind, Graph, Node, NodeId, NodeKind};
 use std::collections::HashMap;
@@ -13,7 +16,12 @@ pub fn extractor_for(path: &Path) -> Option<Box<dyn LanguageExtractor>> {
 }
 
 fn all_extractors() -> Vec<Box<dyn LanguageExtractor>> {
-    vec![Box::new(PythonExtractor)]
+    vec![
+        Box::new(PythonExtractor),
+        Box::new(TypeScriptExtractor),
+        Box::new(GoExtractor),
+        Box::new(RustExtractor),
+    ]
 }
 
 /// Module path used as the qualified-name prefix: `a/b/c.py` -> `a.b.c`.

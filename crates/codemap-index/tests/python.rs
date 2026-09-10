@@ -50,8 +50,15 @@ fn classifies_calls_by_resolvability() {
     let f = facts();
     let n = f.calls.iter().find(|c| c.callee == "normalize").unwrap();
     assert!(n.resolvable);
-    let s = f.calls.iter().find(|c| c.callee == "finish").unwrap();
+    // `self.finish()` is qualified with its enclosing class so it cannot
+    // collide with other methods named `finish` elsewhere in the repo.
+    let s = f
+        .calls
+        .iter()
+        .find(|c| c.callee.ends_with("finish"))
+        .unwrap();
     assert!(s.resolvable);
+    assert_eq!(s.callee, "ChatService.finish");
     // `svc = ChatService()` then `svc.stream_response()` resolves via the
     // local-binding heuristic and is rewritten to its qualified form.
     let l = f

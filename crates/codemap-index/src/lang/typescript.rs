@@ -163,7 +163,7 @@ fn walk(
                 if let Some(r) = route_from_call(ch, src) {
                     f.routes.push(r);
                 }
-                record_call(ch, src, func, imports, bindings, f);
+                record_call(ch, src, class, func, imports, bindings, f);
             }
             _ => {}
         }
@@ -174,6 +174,7 @@ fn walk(
 fn record_call(
     call: TsNode,
     src: &str,
+    class: Option<&str>,
     func: Option<&str>,
     imports: &HashSet<String>,
     bindings: &HashMap<String, String>,
@@ -197,7 +198,12 @@ fn record_call(
             let recv = fun.child_by_field_name("object");
             let mut callee = attr.clone();
             let resolvable = match recv {
-                Some(r) if r.kind() == "this" => true,
+                Some(r) if r.kind() == "this" => {
+                    if let Some(c) = class {
+                        callee = format!("{c}.{attr}");
+                    }
+                    true
+                }
                 Some(r) if r.kind() == "identifier" => {
                     let t = text(r, src);
                     if let Some(cls) = bindings.get(t) {
