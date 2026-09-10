@@ -31,6 +31,10 @@ pub struct Node {
     /// Call sites inside this node that could not be resolved to a target.
     /// Surfaced in the UI so the graph never implies complete coverage.
     pub unresolved_calls: u32,
+    /// Callee names that resolved to nothing in this repo — stdlib and
+    /// third-party. Shown so "unresolved" is not confused with "external".
+    #[serde(default)]
+    pub dependencies: Vec<String>,
 }
 
 impl Node {
@@ -44,6 +48,7 @@ impl Node {
             line_start,
             line_end,
             unresolved_calls: 0,
+            dependencies: Vec::new(),
         }
     }
 }

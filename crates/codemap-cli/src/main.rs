@@ -85,31 +85,53 @@ fn main() -> ExitCode {
                 println!("{}", serde_json::to_string_pretty(&g).unwrap());
             } else {
                 let c = |k: NodeKind| g.nodes().iter().filter(|n| n.kind == k).count();
-                println!("packages  {}", c(NodeKind::Package));
-                println!("modules   {}", c(NodeKind::Module));
-                println!("classes   {}", c(NodeKind::Class));
-                println!("functions {}", c(NodeKind::Function));
-                println!("routes    {}", c(NodeKind::Route));
-                println!("edges     {}", g.edges().len());
-                println!();
-                println!("call sites          {}", st.calls_total);
-                println!("  resolved          {}", st.resolved);
+                let internal = st.resolved + st.undeterminable + st.ambiguous;
+                let pct = st.internal_resolution_pct();
+                println!("{}", path.display());
                 println!(
-                    "  external/stdlib   {}  (callee not in this repo)",
-                    st.external
+                    "{} modules · {} packages",
+                    c(NodeKind::Module),
+                    c(NodeKind::Package)
+                );
+                println!();
+                println!(
+                    "  classes    {:<8} functions  {}",
+                    c(NodeKind::Class),
+                    c(NodeKind::Function)
                 );
                 println!(
-                    "  ambiguous         {}  (>1 candidate, not guessed)",
+                    "  routes     {:<8} edges      {}",
+                    c(NodeKind::Route),
+                    g.edges().len()
+                );
+                println!();
+                let filled = ((pct / 100.0) * 24.0).round() as usize;
+                println!(
+                    "  call resolution  {}{}  {:.0}%",
+                    "\u{2588}".repeat(filled),
+                    "\u{2591}".repeat(24 - filled),
+                    pct
+                );
+                println!("                   of {internal} internal call sites");
+                println!();
+                println!("  resolved     {:>6}", st.resolved);
+                println!(
+                    "  ambiguous    {:>6}   >1 candidate, not guessed",
                     st.ambiguous
                 );
                 println!(
-                    "  undeterminable    {}  (needs type inference)",
+                    "  needs types  {:>6}   calls through variables",
                     st.undeterminable
                 );
                 println!(
-                    "internal resolution {:.1}%  (excludes external/stdlib)",
-                    st.internal_resolution_pct()
+                    "  external     {:>6}   stdlib / dependencies, not counted",
+                    st.external
                 );
+                println!();
+                println!("Containment and routes are exact. Only call edges are heuristic.");
+                if !all {
+                    println!("Tests, generated code and vendored deps skipped. Pass --all to include them.");
+                }
             }
             ExitCode::SUCCESS
         }
@@ -166,7 +188,7 @@ fn cmd_start(path: PathBuf, port: u16) -> ExitCode {
         eprintln!("codemap: already running for {}", root.display());
         return ExitCode::FAILURE;
     }
-    println!("codemap: indexing {}", root.display());
+    println!("codemap  {}", root.display());
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => {
@@ -205,14 +227,18 @@ fn cmd_status(path: PathBuf) -> ExitCode {
     let root = abs(path);
     if codemap_daemon::server::is_running(&root) {
         let port = codemap_daemon::server::daemon_port(&root);
+        println!("running   {}", root.display());
         println!(
-            "running   {}\nurl       http://127.0.0.1:{}",
-            root.display(),
+            "url       http://127.0.0.1:{}",
             port.map(|p| p.to_string()).unwrap_or("?".into())
         );
+        println!("ticker    codemap ticker {}", root.display());
+        println!("stop      codemap stop {}", root.display());
         ExitCode::SUCCESS
     } else {
-        println!("not running for {}", root.display());
+        println!("not running   {}", root.display());
+        println!();
+        println!("start with    codemap start {}", root.display());
         ExitCode::FAILURE
     }
 }
@@ -305,7 +331,7 @@ fn cmd_ticker(path: PathBuf) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
-    match ticker::run(port) {
+    match ticker::run(port, root.display().to_string()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("codemap: {e}");

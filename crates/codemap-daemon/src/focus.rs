@@ -22,6 +22,9 @@ struct TrailEntry {
 pub struct TrailItem {
     pub node: NodeId,
     pub weight: f32,
+    /// Seconds since this node was touched, so the UI can say "2s ago"
+    /// instead of only fading a dot.
+    pub ago_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,6 +35,8 @@ pub struct FocusSnapshot {
     pub trail: Vec<TrailItem>,
     pub following: bool,
     pub agent: &'static str,
+    /// Seconds since the most recent activity event, for "last event 2s ago".
+    pub last_event_secs: Option<u64>,
 }
 
 pub struct FocusEngine {
@@ -94,16 +99,22 @@ impl FocusEngine {
                 TrailItem {
                     node: e.node,
                     weight: 0.5f32.powf(age / hl),
+                    ago_secs: age as u64,
                 }
             })
             .filter(|t| t.weight > CUTOFF)
             .collect();
+        let last_event_secs = self
+            .trail
+            .last()
+            .map(|e| now.saturating_duration_since(e.at).as_secs());
         FocusSnapshot {
             active: self.active,
             ancestors: self.active.map(|a| graph.ancestors(a)).unwrap_or_default(),
             trail,
             following: self.following,
             agent: self.agent.label(),
+            last_event_secs,
         }
     }
 }

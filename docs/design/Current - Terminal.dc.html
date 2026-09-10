@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://reinhart1010.github.io/aileron/aileron.lite.min.css">
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body{margin:0;background:#1e1e1e;color:#cccccc;font:13px/1.45 "Aileron",system-ui,sans-serif}
+  a{color:#cccccc} a:hover{color:#ffb454}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;gap:28px;padding:28px;align-items:flex-start">
+  <div style="color:#8a8a8a;font-size:12px">Current terminal surfaces — recreated from crates/codemap-cli/src/{ticker.rs, main.rs} and codemap-daemon/src/server.rs</div>
+
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="color:#8a8a8a;font-size:11px">codemap ticker · tmux pane, 9 rows (ratatui Block, Borders::ALL)</div>
+    <pre style="margin:0;padding:0;width:820px;background:#000000;color:#cccccc;font:inherit;white-space:pre;line-height:1.35">
+<span style="color:#1c2230">┌</span><span style="color:#cccccc"> codemap </span><span style="color:#1c2230">─────────────────────────────────────────────────────────────────────────────────┐</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">◈ </span>codemap-daemon ▸ resolver.rs ▸ Resolver                                               <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#ffb454">● resolve</span><span style="color:#585858">  resolver.rs:15</span>                                                            <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  ←  </span>handle_hook_line · run                                                            <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  →  </span>same_file                                                                         <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  ⇡  </span><span style="color:#7ee081">GET /ws</span>                                                                           <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  ~  resolve · touch · handle_hook_line · normalize · parse_patch · same_file</span>          <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  following </span><span style="color:#ffb454">claude</span>                                                                    <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">└──────────────────────────────────────────────────────────────────────────────────────────┘</span></pre>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="color:#8a8a8a;font-size:11px">ticker with no daemon</div>
+    <pre style="margin:0;padding:0;width:820px;background:#000000;color:#cccccc;font:inherit;white-space:pre;line-height:1.35">
+<span style="color:#1c2230">┌</span><span style="color:#cccccc"> codemap </span><span style="color:#1c2230">─────────────────────────────────────────────────────────────────────────────────┐</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">◈ </span>                                                                                       <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#ffb454">● —</span><span style="color:#585858">  </span>                                                                                    <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  ←  </span>—                                                                                 <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  →  </span>—                                                                                 <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  ⇡  </span><span style="color:#7ee081">—</span>                                                                                 <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  ~  —</span>                                                                                 <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">│</span><span style="color:#585858">  no daemon — run `codemap start`</span>                                                      <span style="color:#1c2230">│</span>
+<span style="color:#1c2230">└──────────────────────────────────────────────────────────────────────────────────────────┘</span></pre>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,400px));gap:20px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:#8a8a8a;font-size:11px">codemap start .</div>
+      <pre style="margin:0;padding:14px;background:#000000;font:inherit;white-space:pre-wrap"><span style="color:#5fd75f">$</span> codemap start .
+codemap: indexing /Users/dev/code/codemap
+codemap: ticker -> codemap ticker /Users/dev/code/codemap
+codemap: http://127.0.0.1:7878
+codemap: socket /tmp/codemap-3f9a1c.sock
+codemap: indexed 96 nodes from /Users/dev/code/codemap</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:#8a8a8a;font-size:11px">codemap status . / stop .</div>
+      <pre style="margin:0;padding:14px;background:#000000;font:inherit;white-space:pre-wrap"><span style="color:#5fd75f">$</span> codemap status .
+running   /Users/dev/code/codemap
+url       http://127.0.0.1:7878
+<span style="color:#5fd75f">$</span> codemap stop .
+codemap: stopped (socket removed); the process exits on next request
+<span style="color:#5fd75f">$</span> codemap status .
+not running for /Users/dev/code/codemap</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:#8a8a8a;font-size:11px">codemap index .</div>
+      <pre style="margin:0;padding:14px;background:#000000;font:inherit;white-space:pre-wrap"><span style="color:#5fd75f">$</span> codemap index .
+packages  4
+modules   20
+classes   9
+functions 60
+routes    3
+edges     70
+
+call sites          214
+  resolved          70
+  external/stdlib   98  (callee not in this repo)
+  ambiguous         11  (>1 candidate, not guessed)
+  undeterminable    35  (needs type inference)
+internal resolution 60.3%  (excludes external/stdlib)</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:#8a8a8a;font-size:11px">codemap reach . &lt;symbol&gt;</div>
+      <pre style="margin:0;padding:14px;background:#000000;font:inherit;white-space:pre-wrap"><span style="color:#5fd75f">$</span> codemap reach . run
+3 symbols named run; qualify one of:
+  ticker::run  (crates/codemap-cli/src/ticker.rs:31)
+  server::Daemon::run  (crates/codemap-daemon/src/server.rs:26)
+  watch::run  (crates/codemap-daemon/src/watch.rs:18)
+<span style="color:#5fd75f">$</span> codemap reach . server::ws_handler
+server::ws_handler is reachable from:
+  GET /ws
+<span style="color:#5fd75f">$</span> codemap reach . walker::walk
+walker::walk is not reachable from any detected route</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:#8a8a8a;font-size:11px">codemap install-hooks</div>
+      <pre style="margin:0;padding:14px;background:#000000;font:inherit;white-space:pre-wrap"><span style="color:#5fd75f">$</span> codemap install-hooks
+wrote  claude   /Users/dev/.claude/settings.json
+wrote  codex    /Users/dev/.codex/hooks.json
+skip   gemini   (not installed)
+
+note: codex requires you to review and trust the hook definition on first run.</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:#8a8a8a;font-size:11px">codemap ticker . (no daemon) / codemap --help</div>
+      <pre style="margin:0;padding:14px;background:#000000;font:inherit;white-space:pre-wrap"><span style="color:#5fd75f">$</span> codemap ticker .
+codemap: no daemon for /Users/dev/code/codemap — run `codemap start` first
+<span style="color:#5fd75f">$</span> codemap --help
+Live code map for agentic development
+
+Usage: codemap &lt;COMMAND&gt;
+
+Commands:
+  index          Index a repository and print a summary
+  reach          List the API routes that can reach a symbol
+  start          Start the live daemon for a repo and serve the browser client
+  stop           Stop the daemon for a repo
+  status         Report whether a daemon is running for a repo
+  hook           Internal: reads a hook payload on stdin and forwards it to the daemon
+  install-hooks  Write hook config for installed agents
+  ticker         Live text ticker, for a tmux pane beside your agent
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version</pre>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

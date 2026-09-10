@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://reinhart1010.github.io/aileron/aileron.lite.min.css">
+<style>
+  body{margin:0;background:#0b0d12;color:#d7dae0;font:13px "Aileron",system-ui,sans-serif;overflow:hidden}
+  a{color:#d7dae0} a:hover{color:#ffb454}
+</style>
+</helmet>
+<div style="display:flex;height:100vh;box-sizing:border-box">
+  <div style="flex:1;position:relative;min-width:0">
+    <canvas data-cm-canvas="1" onMouseDown="{{ onDown }}" onWheel="{{ onWheel }}" onContextMenu="{{ onCtx }}" style="display:block;width:100%;height:100%;cursor:grab"></canvas>
+    <div style="position:absolute;top:0;left:0;right:0;padding:10px 14px;pointer-events:none;display:flex;gap:14px;align-items:center;background:linear-gradient(#0b0d12dd,#0b0d1200)">
+      <div style="pointer-events:auto;display:flex;gap:4px;align-items:center">
+        <span onClick="{{ goRoot }}" style="cursor:pointer;color:#5a6272" style-hover="color:#d7dae0">{{ repoName }}</span>
+        <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="0">
+          <span style="color:#39415280">▸</span><b style="color:#d7dae0;font-weight:600">{{ c.name }}</b>
+        </sc-for>
+      </div>
+      <button onClick="{{ toggleFollow }}" style="pointer-events:auto;margin-left:auto;border:1px solid {{ followBorder }};background:{{ followBg }};color:{{ followFg }};padding:4px 10px;border-radius:4px;cursor:pointer;font:inherit">{{ followLabel }}</button>
+    </div>
+    <div style="position:absolute;bottom:8px;left:14px;color:#5a6272;font-size:11px">{{ statusText }}</div>
+  </div>
+  <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ true }}">
+  <div style="width:380px;border-left:1px solid #1c2230;background:#11141b;display:flex;flex-direction:column;overflow:hidden;flex:none">
+    <div style="padding:12px 14px;border-bottom:1px solid #1c2230">
+      <div style="color:#ffb454;font-size:11px;text-transform:uppercase;letter-spacing:.08em">{{ sel.kind }}</div>
+      <div style="margin-top:4px;word-break:break-all">{{ sel.qualified_name }}</div>
+      <div style="color:#5a6272;font-size:11px;margin-top:4px">{{ selLoc }}</div>
+    </div>
+    <div style="flex:1;overflow:auto;padding:12px 14px">
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 6px;font-size:11px;color:#5a6272;text-transform:uppercase;letter-spacing:.08em;font-weight:600">reachable from</h4>
+        <sc-if value="{{ hasRoutes }}" hint-placeholder-val="{{ true }}">
+          <div><sc-for list="{{ routes }}" as="r" hint-placeholder-count="2"><span onClick="{{ r.go }}" style="display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;border:1px solid #2c5c38;border-radius:3px;cursor:pointer;font-size:11px;color:#7ee081" style-hover="border-color:#ffb454;color:#ffb454">{{ r.name }}</span></sc-for></div>
+        </sc-if>
+        <sc-if value="{{ noRoutes }}" hint-placeholder-val="{{ false }}"><span style="color:#d68b5c;font-size:11px">no route found — call edges are ~44% complete, so this is not proof none exists</span></sc-if>
+      </div>
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 6px;font-size:11px;color:#5a6272;text-transform:uppercase;letter-spacing:.08em;font-weight:600">called by</h4>
+        <sc-if value="{{ hasCallers }}" hint-placeholder-val="{{ true }}"><div><sc-for list="{{ callers }}" as="c" hint-placeholder-count="2"><span onClick="{{ c.go }}" style="display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;border:1px solid #1c2230;border-radius:3px;cursor:pointer;font-size:11px" style-hover="border-color:#ffb454;color:#ffb454">{{ c.name }}</span></sc-for></div></sc-if>
+        <sc-if value="{{ noCallers }}" hint-placeholder-val="{{ false }}"><span style="color:#5a6272">nothing indexed</span></sc-if>
+      </div>
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 6px;font-size:11px;color:#5a6272;text-transform:uppercase;letter-spacing:.08em;font-weight:600">calls</h4>
+        <sc-if value="{{ hasCallees }}" hint-placeholder-val="{{ true }}"><div><sc-for list="{{ callees }}" as="c" hint-placeholder-count="2"><span onClick="{{ c.go }}" style="display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;border:1px solid #1c2230;border-radius:3px;cursor:pointer;font-size:11px" style-hover="border-color:#ffb454;color:#ffb454">{{ c.name }}</span></sc-for></div></sc-if>
+        <sc-if value="{{ noCallees }}" hint-placeholder-val="{{ false }}"><span style="color:#5a6272">nothing indexed</span></sc-if>
+      </div>
+      <sc-if value="{{ hasUnresolved }}" hint-placeholder-val="{{ false }}"><div style="margin-bottom:16px"><span style="color:#d68b5c;font-size:11px">{{ unresolvedText }}</span></div></sc-if>
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 6px;font-size:11px;color:#5a6272;text-transform:uppercase;letter-spacing:.08em;font-weight:600">source</h4>
+        <pre style="margin:0;padding:8px;background:#0d1016;border:1px solid #1c2230;border-radius:4px;overflow:auto;max-height:260px;font-size:11px;line-height:1.5;color:#aab3c2;font-family:inherit">{{ source }}</pre>
+      </div>
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 6px;font-size:11px;color:#5a6272;text-transform:uppercase;letter-spacing:.08em;font-weight:600">send to agent</h4>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          <sc-for list="{{ intents }}" as="i" hint-placeholder-count="5"><button onClick="{{ i.send }}" style="border:1px solid #1c2230;background:#151922;color:#d7dae0;padding:4px 8px;border-radius:4px;cursor:pointer;font:inherit;font-size:11px" style-hover="border-color:#ffb454;color:#ffb454">{{ i.label }}</button></sc-for>
+          <button style="border:1px solid #1c2230;background:#151922;color:#d7dae0;padding:4px 8px;border-radius:4px;cursor:pointer;font:inherit;font-size:11px" style-hover="border-color:#ffb454;color:#ffb454">open in editor</button>
+        </div>
+        <div style="color:#5a6272;font-size:11px;margin-top:6px">types into the agent pane without submitting</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { level: null, sel: null, following: true, ready: false, sent: null };
+  canvasRef = { get current() { return document.querySelector('[data-cm-canvas]'); } };
+  cam = { x: 0, y: 0, z: 1, tx: 0, ty: 0, tz: 1 };
+  layout = new Map(); hitboxes = []; portalHit = []; hover = null; drag = null;
+  KIND_COLOR = { route: '#7ee081', class: '#7aa2f7', function: '#9aa5b8', module: '#414b5e', package: '#414b5e' };
+  KIND_BASE = { package: 26, module: 18, class: 13, route: 11, function: 7 };
+
+  async componentDidMount() {
+    this.D = await import('./codemap-data.js');
+    this.G = this.D.index(this.D.nodes, this.D.edges);
+    this.focus = this.D.focus;
+    const n = this.G.byId.get(this.focus.active);
+    this.setState({ level: n.parent, ready: true }, () => { this.relayout(); const p = this.layout.get(this.focus.active); if (p) { this.cam.tx = p.x; this.cam.ty = p.y; } });
+    this.resize(); addEventListener('resize', this.resize);
+    addEventListener('mouseup', this.onUp); addEventListener('mousemove', this.onMove); addEventListener('keydown', this.onKey);
+    this.raf = requestAnimationFrame(this.loop);
+  }
+  componentWillUnmount() { cancelAnimationFrame(this.raf); removeEventListener('resize', this.resize); removeEventListener('mouseup', this.onUp); removeEventListener('mousemove', this.onMove); removeEventListener('keydown', this.onKey); }
+  resize = () => { const cv = this.canvasRef.current; if (!cv) return; const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = r.width * d; cv.height = r.height * d; cv.getContext('2d').setTransform(d, 0, 0, d, 0, 0); };
+  kidsOf(id) { return this.G.children.get(id == null ? 'root' : id) || []; }
+  relayout() {
+    const ids = this.kidsOf(this.state.level); this.layout = new Map();
+    const n = ids.length || 1, R = 30 + Math.sqrt(n) * 46;
+    ids.forEach((id, i) => { const a = (i / n) * Math.PI * 2, jitter = ((id * 2654435761) % 1000) / 1000;
+      this.layout.set(id, { x: Math.cos(a) * R * (.55 + jitter * .6), y: Math.sin(a) * R * (.55 + jitter * .6), z: (jitter - .5) * 90, vx: 0, vy: 0, vz: 0 }); });
+    for (let s = 0; s < 220; s++) this.step(ids);
+  }
+  step(ids) {
+    const L = this.layout;
+    for (let i = 0; i < ids.length; i++) { const a = L.get(ids[i]); for (let j = i + 1; j < ids.length; j++) { const b = L.get(ids[j]);
+      let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z; const d2 = dx * dx + dy * dy + dz * dz + .01, d = Math.sqrt(d2), rep = 5200 / d2; dx /= d; dy /= d; dz /= d;
+      a.vx -= dx * rep; a.vy -= dy * rep; a.vz -= dz * rep; b.vx += dx * rep; b.vy += dy * rep; b.vz += dz * rep; } }
+    const inside = new Set(ids);
+    for (const id of ids) { const a = L.get(id);
+      for (const t of (this.G.calls.get(id) || [])) { if (!inside.has(t)) continue; const b = L.get(t); const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z; const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1, f = (d - 110) * 0.012;
+        a.vx += dx / d * f; a.vy += dy / d * f; a.vz += dz / d * f; b.vx -= dx / d * f; b.vy -= dy / d * f; b.vz -= dz / d * f; }
+      a.vx -= a.x * 0.004; a.vy -= a.y * 0.004; a.vz -= a.z * 0.006; a.x += a.vx * .5; a.y += a.vy * .5; a.z += a.vz * .5; a.vx *= .82; a.vy *= .82; a.vz *= .82; }
+  }
+  project(p, cv) { const z = p.z + 340, s = (620 / Math.max(z, 60)) * this.cam.z; return { x: cv.clientWidth / 2 + (p.x - this.cam.x) * s, y: cv.clientHeight / 2 + (p.y - this.cam.y) * s, s }; }
+  sizeOf(n) { return (this.KIND_BASE[n.kind] || 8) * (1 + Math.min(n.child_count, 40) / 28); }
+  ancestorAtLevel(id) { let cur = id, g = 0; while (cur != null && g++ < 64) { const n = this.G.byId.get(cur); if (!n) return null; if (n.parent === this.state.level) return cur; cur = n.parent; } return null; }
+  loop = () => { this.hitboxes = []; this.portalHit = []; if (this.state.ready) this.draw(); this.raf = requestAnimationFrame(this.loop); };
+  draw() {
+    const cv = this.canvasRef.current; if (!cv) return; const ctx = cv.getContext('2d'), cam = this.cam;
+    cam.x += (cam.tx - cam.x) * .12; cam.y += (cam.ty - cam.y) * .12; cam.z += (cam.tz - cam.z) * .12;
+    const W = cv.clientWidth, H = cv.clientHeight; ctx.clearRect(0, 0, W, H); ctx.fillStyle = '#0b0d12'; ctx.fillRect(0, 0, W, H);
+    const ids = this.kidsOf(this.state.level), inside = new Set(ids), f = this.focus, sel = this.state.sel;
+    const trailW = new Map(f.trail.map(t => [t.node, t.weight])), anc = new Set(f.ancestors);
+    ctx.lineWidth = 1;
+    for (const id of ids) { const a = this.layout.get(id); if (!a) continue; for (const t of (this.G.calls.get(id) || [])) { if (!inside.has(t)) continue; const b = this.layout.get(t); if (!b) continue;
+      const pa = this.project(a, cv), pb = this.project(b, cv); const lit = id === f.active || t === f.active || id === sel || t === sel;
+      ctx.strokeStyle = lit ? '#ffb454aa' : '#1c2230'; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke(); } }
+    const portals = new Map();
+    for (const id of ids) for (const t of (this.G.calls.get(id) || [])) { if (inside.has(t)) continue; const key = this.ancestorAtLevel(t); if (key == null || inside.has(key)) continue; portals.set(key, (portals.get(key) || 0) + 1); }
+    let pi = 0; const pn = portals.size;
+    for (const [pid, count] of portals) { const ang = (pi++ / Math.max(pn, 1)) * Math.PI * 2, r = Math.min(W, H) * 0.42, x = W / 2 + Math.cos(ang) * r, y = H / 2 + Math.sin(ang) * r;
+      ctx.fillStyle = '#5a6272'; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); ctx.font = '10px ui-monospace'; const nm = (this.G.byId.get(pid) || {}).name || '?';
+      ctx.textAlign = Math.cos(ang) > 0 ? 'left' : 'right'; ctx.fillText(`${nm} ×${count}`, x + (Math.cos(ang) > 0 ? 9 : -9), y + 3); this.portalHit.push({ x, y, id: pid }); }
+    const drawn = ids.map(id => ({ id, p: this.project(this.layout.get(id) || { x: 0, y: 0, z: 0 }, cv) })).sort((a, b) => a.p.s - b.p.s);
+    ctx.textAlign = 'center';
+    for (const { id, p } of drawn) { const n = this.G.byId.get(id); if (!n) continue; const rad = Math.max(2, this.sizeOf(n) * p.s * 0.5);
+      const isActive = id === f.active, tw = trailW.get(id) || 0, onPath = anc.has(id);
+      let color = this.KIND_COLOR[n.kind] || '#9aa5b8'; if (isActive) color = '#ffb454'; else if (tw > 0) color = '#c98a3a';
+      ctx.globalAlpha = isActive ? 1 : tw > 0 ? .45 + tw * .55 : onPath ? .9 : .62;
+      if (n.child_count > 0) { ctx.beginPath(); ctx.arc(p.x, p.y, rad * 1.9, 0, 7); ctx.fillStyle = color + '14'; ctx.fill(); }
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fillStyle = color; ctx.fill();
+      if (isActive) { ctx.strokeStyle = '#ffb454'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, rad + 5 + Math.sin(Date.now() / 260) * 2, 0, 7); ctx.stroke(); }
+      if (id === sel) { ctx.strokeStyle = '#d7dae0'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(p.x, p.y, rad + 3, 0, 7); ctx.stroke(); }
+      if (rad > 6 || isActive || id === this.hover) { ctx.globalAlpha = 1; ctx.fillStyle = isActive ? '#ffb454' : '#d7dae0'; ctx.font = `${Math.min(13, Math.max(9, rad * 0.85))}px ui-monospace`; ctx.fillText(n.name.slice(0, 28), p.x, p.y - rad - 5); }
+      ctx.globalAlpha = 1; this.hitboxes.push({ x: p.x, y: p.y, r: Math.max(rad, 7), id }); }
+  }
+  onDown = e => { this.drag = { x: e.clientX, y: e.clientY, cx: this.cam.tx, cy: this.cam.ty, moved: false }; e.currentTarget.style.cursor = 'grabbing'; };
+  onUp = e => { const cv = this.canvasRef.current; if (cv) cv.style.cursor = 'grab'; if (this.drag && !this.drag.moved) this.click(e); this.drag = null; };
+  onMove = e => { const cv = this.canvasRef.current; if (!cv) return;
+    if (this.drag) { const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) { this.drag.moved = true; this.setFollow(false); } this.cam.tx = this.drag.cx - dx / this.cam.z; this.cam.ty = this.drag.cy - dy / this.cam.z; return; }
+    const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; this.hover = (this.hitboxes.find(h => (h.x - mx) ** 2 + (h.y - my) ** 2 < h.r * h.r) || {}).id ?? null; };
+  onWheel = e => { this.cam.tz = Math.max(.25, Math.min(4, this.cam.tz * (e.deltaY > 0 ? 0.9 : 1.1))); };
+  onCtx = e => { e.preventDefault(); this.ascend(); };
+  onKey = e => { if (e.key === 'Escape') this.ascend(); if (e.key === 'f') this.setFollow(!this.state.following); };
+  click(e) { const cv = this.canvasRef.current; if (!cv) return; const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (mx < 0 || my < 0 || mx > r.width || my > r.height) return;
+    const p = this.portalHit.find(h => (h.x - mx) ** 2 + (h.y - my) ** 2 < 100); if (p) { this.descendTo(p.id); return; }
+    const h = this.hitboxes.find(h => (h.x - mx) ** 2 + (h.y - my) ** 2 < h.r * h.r); if (!h) return;
+    const n = this.G.byId.get(h.id); if (e.detail > 1 && n.child_count > 0) { this.enter(h.id); return; } this.setState({ sel: h.id }); }
+  enter(id) { this.cam.tx = this.cam.ty = 0; this.cam.tz = 1; this.setState({ level: id, sel: null }, () => this.relayout()); }
+  ascend() { const { level } = this.state; if (level == null) return; const n = this.G.byId.get(level); this.cam.tx = this.cam.ty = 0; this.setState({ level: n ? n.parent : null }, () => this.relayout()); }
+  descendTo(id) { const n = this.G.byId.get(id); if (n && n.child_count > 0) this.enter(id); else this.setState({ level: n ? n.parent : null, sel: id }, () => this.relayout()); }
+  goNode(id) { const n = this.G.byId.get(id); this.setState({ level: n.parent, sel: id, following: false }, () => this.relayout()); }
+  setFollow(on) { this.setState({ following: on }); }
+  renderVals() {
+    const { ready, level, sel: selId, following } = this.state;
+    const D = this.D, G = this.G, f = this.focus;
+    const base = { canvasRef: this.canvasRef, onDown: this.onDown, onWheel: this.onWheel, onCtx: this.onCtx, toggleFollow: () => this.setFollow(!following), goRoot: () => { this.setState({ level: null }, () => this.relayout()); },
+      followLabel: following ? 'following ' + (f ? f.agent : 'fs') : 'detached', followBg: following ? '#ffb454' : '#151922', followFg: following ? '#0b0d12' : '#5a6272', followBorder: following ? '#ffb454' : '#1c2230',
+      repoName: ready ? D.root.split('/').pop() : 'repo', crumbs: [], statusText: 'connecting…', panelOpen: false, sel: {}, intents: [] };
+    if (!ready) return base;
+    base.crumbs = G.chain(level).filter(id => id != null).map(id => G.byId.get(id));
+    const an = G.byId.get(f.active);
+    base.statusText = `${D.nodes.length} nodes · ${D.edges.length} edges · trail ${f.trail.length}` + (an ? ` · active ${an.qualified_name}` : '');
+    if (selId == null) return base;
+    const sel = G.byId.get(selId), mk = id => { const n = G.byId.get(id); return { name: n.name, go: () => this.goNode(id) }; };
+    const routes = G.routesReaching(selId).map(mk), callers = (G.rcalls.get(selId) || []).map(mk), callees = (G.calls.get(selId) || []).map(mk);
+    const u = sel.unresolved_calls || 0;
+    return { ...base, panelOpen: true, sel, selLoc: sel.file.split('/').slice(-2).join('/') + ':' + sel.line_start,
+      routes, hasRoutes: routes.length > 0, noRoutes: routes.length === 0, callers, hasCallers: callers.length > 0, noCallers: callers.length === 0,
+      callees, hasCallees: callees.length > 0, noCallees: callees.length === 0, hasUnresolved: u > 0, unresolvedText: `${u} unresolved call${u > 1 ? 's' : ''} in this node`,
+      source: D.sourceFor(sel), intents: ['explain', 'write tests', 'find bugs', 'refactor', 'trace callers'].map(i => ({ label: this.state.sent === i ? 'sent ✓' : i, send: () => { this.setState({ sent: i }); setTimeout(() => this.setState({ sent: null }), 1200); } })) };
+  }
+}
+</script>
+</body>
+</html>

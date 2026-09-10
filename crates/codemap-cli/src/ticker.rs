@@ -15,6 +15,10 @@ use std::time::Duration;
 
 #[derive(Default, Clone)]
 struct View {
+    repo: String,
+    unresolved: u32,
+    resolved: u32,
+    last_event: Option<u64>,
     crumb: String,
     active: String,
     loc: String,
@@ -27,8 +31,11 @@ struct View {
     connected: bool,
 }
 
-pub fn run(port: u16) -> std::io::Result<()> {
-    let view = Arc::new(Mutex::new(View::default()));
+pub fn run(port: u16, repo: String) -> std::io::Result<()> {
+    let view = Arc::new(Mutex::new(View {
+        repo,
+        ..View::default()
+    }));
     {
         let v = view.clone();
         std::thread::spawn(move || poll_loop(port, v));
@@ -59,64 +66,118 @@ pub fn run(port: u16) -> std::io::Result<()> {
 }
 
 fn render(f: &mut Frame, v: &View) {
-    let dim = Style::new().fg(Color::DarkGray);
-    let hot = Style::new().fg(Color::Rgb(255, 180, 84));
-    let ok = Style::new().fg(Color::Rgb(126, 224, 129));
+    let dim = Style::new().fg(Color::Rgb(123, 131, 151));
+    let dimmer = Style::new().fg(Color::Rgb(86, 94, 115));
+    let agent = Style::new().fg(Color::Rgb(242, 180, 90));
+    let route = Style::new().fg(Color::Rgb(111, 211, 160));
+    let warn = Style::new().fg(Color::Rgb(238, 138, 99));
+    let text = Style::new().fg(Color::Rgb(223, 227, 236));
 
-    let join = |v: &Vec<String>, n: usize| {
-        if v.is_empty() {
-            "—".to_string()
+    // Labels dim, values bright, caveats as sentences.
+    let field = |label: &str, items: &Vec<String>, style: Style, empty: &str| {
+        let val = if items.is_empty() {
+            Span::styled(empty.to_string(), dimmer)
         } else {
-            v.iter().take(n).cloned().collect::<Vec<_>>().join(" · ")
-        }
+            Span::styled(
+                items.iter().take(4).cloned().collect::<Vec<_>>().join("  "),
+                style,
+            )
+        };
+        Line::from(vec![Span::styled(format!("{label:<10}"), dimmer), val])
     };
 
-    let status = if !v.connected {
-        Line::from(Span::styled("  no daemon — run `codemap start`", dim))
-    } else if v.following {
+    if !v.connected {
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(Span::styled("not running", dimmer)),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("No daemon for ", dim),
+                    Span::styled(v.repo.clone(), text),
+                ]),
+                Line::from(Span::styled(
+                    "start one in another pane; this will attach on its own",
+                    dimmer,
+                )),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("$ ", dimmer),
+                    Span::styled("codemap start .", route),
+                ]),
+            ])
+            .block(shell(" codemap ")),
+            f.area(),
+        );
+        return;
+    }
+
+    let mut body = vec![Line::from(vec![
+        Span::styled(v.crumb.clone(), dim),
+        Span::styled(if v.crumb.is_empty() { "" } else { "  " }, dim),
+    ])];
+
+    if v.active.is_empty() {
+        body.push(Line::from(Span::styled("waiting for your agent…", dimmer)));
+    } else {
+        body.push(Line::from(vec![
+            Span::styled("● ", agent),
+            Span::styled(v.active.clone(), agent),
+            Span::styled(format!("   {}", v.loc), dimmer),
+        ]));
+        if v.unresolved > 0 {
+            let total = v.unresolved + v.resolved;
+            body.push(Line::from(Span::styled(
+                format!(
+                    "           {} of {} call sites unresolved",
+                    v.unresolved, total
+                ),
+                warn,
+            )));
+        }
+    }
+    body.push(Line::from(""));
+    body.push(field("called by", &v.callers, text, "—"));
+    body.push(field("calls", &v.callees, text, "—"));
+    body.push(if v.routes.is_empty() {
         Line::from(vec![
-            Span::styled("  following ", dim),
-            Span::styled(v.agent.clone(), hot),
+            Span::styled(format!("{:<10}", "routes"), dimmer),
+            Span::styled("none found", dimmer),
+            Span::styled("  — unknown, not unreachable", dimmer),
         ])
     } else {
-        Line::from(Span::styled("  detached  (f to re-attach)", dim))
-    };
-
-    let body = vec![
-        Line::from(vec![Span::styled("◈ ", dim), Span::raw(v.crumb.clone())]),
-        Line::from(vec![
-            Span::styled("● ", hot),
-            Span::styled(v.active.clone(), hot),
-            Span::styled(format!("  {}", v.loc), dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  ←  ", dim),
-            Span::raw(join(&v.callers, 5)),
-        ]),
-        Line::from(vec![
-            Span::styled("  →  ", dim),
-            Span::raw(join(&v.callees, 5)),
-        ]),
-        Line::from(vec![
-            Span::styled("  ⇡  ", dim),
-            Span::styled(join(&v.routes, 4), ok),
-        ]),
-        Line::from(vec![
-            Span::styled("  ~  ", dim),
-            Span::styled(join(&v.trail, 6), dim),
-        ]),
-        status,
-    ];
-
-    f.render_widget(
-        Paragraph::new(body).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::new().fg(Color::Rgb(28, 34, 48)))
-                .title(" codemap "),
+        field("routes", &v.routes, route, "—")
+    });
+    body.push(Line::from(vec![
+        Span::styled(format!("{:<10}", "agent"), dimmer),
+        Span::styled(v.agent.clone(), text),
+        Span::styled(
+            match v.last_event {
+                Some(a) if a < 2 => "  · just now".to_string(),
+                Some(a) if a < 60 => format!("  · {a}s ago"),
+                Some(a) => format!("  · {}m ago", a / 60),
+                None => String::new(),
+            },
+            dimmer,
         ),
-        f.area(),
-    );
+    ]));
+    body.push(field("trail", &v.trail, dim, "—"));
+    body.push(Line::from(if v.following {
+        Span::styled(
+            "f follow · q quit                       90s half-life",
+            dimmer,
+        )
+    } else {
+        Span::styled("detached (you steered) · f re-attach · q quit", dimmer)
+    }));
+
+    f.render_widget(Paragraph::new(body).block(shell(" codemap ")), f.area());
+}
+
+fn shell(title: &'static str) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::new().fg(Color::Rgb(37, 42, 58)))
+        .title(title)
 }
 
 fn toggle_follow(port: u16) {
@@ -230,6 +291,7 @@ fn apply(v: &Value, view: &Arc<Mutex<View>>) {
             };
             let mut view = view.lock().unwrap();
             view.following = v.get("following").and_then(Value::as_bool).unwrap_or(true);
+            view.last_event = v.get("last_event_secs").and_then(Value::as_u64);
             view.agent = v
                 .get("agent")
                 .and_then(Value::as_str)
@@ -304,6 +366,7 @@ fn apply(v: &Value, view: &Arc<Mutex<View>>) {
                     }
                 }
             }
+            view.resolved = callees.len() as u32;
             view.callers = callers;
             view.callees = callees;
         }

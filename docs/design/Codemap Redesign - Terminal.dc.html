@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://reinhart1010.github.io/aileron/aileron.lite.min.css">
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/nocturne-09853d0a-cf27-4f94-8004-eda96f4472ab/styles.css">
+<script src="_ds/nocturne-09853d0a-cf27-4f94-8004-eda96f4472ab/_ds_bundle.js"></script>
+<style>
+  :root{--cm-font:"Aileron",system-ui,sans-serif;--cm-bg:#0e1017;--cm-surface:#171a25;--cm-agent:#f2b45a;--cm-route:#6fd3a0;--cm-class:#7fb0ff;--cm-module:#9184d9;--cm-dep:#5fd0d4;--cm-warn:#ee8a63}
+  body{margin:0;background:radial-gradient(1200px 700px at 30% -10%,#171a2a 0%,var(--cm-bg) 60%);color:var(--color-text);font-family:var(--cm-font);-webkit-font-smoothing:antialiased}
+  input,button,.btn,.tag,.input{font-family:var(--cm-font)}
+  a{color:var(--cm-dep)} a:hover{color:var(--color-text)}
+  @keyframes cm-pulse{0%,100%{box-shadow:0 0 0 0 rgba(242,180,90,.55)}70%{box-shadow:0 0 0 5px rgba(242,180,90,0)}}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;gap:40px;padding:40px;align-items:flex-start;max-width:1120px">
+  <div>
+    <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600)">terminal · redesign</div>
+    <h4 style="margin:6px 0 0;font-size:26px;font-weight:400;letter-spacing:-0.01em;font-family:var(--cm-font)">codemap in the terminal</h4>
+    <div style="font-size:13px;color:var(--color-neutral-500);margin-top:4px;max-width:560px;line-height:1.55">The ticker sits in a 10-row tmux pane beside the agent. One glance: where the agent is, what that code touches, and how much codemap actually knows about it.</div>
+  </div>
+
+  <!-- ticker -->
+  <div style="display:flex;flex-direction:column;gap:8px;width:100%">
+    <div style="font-size:11px;color:var(--color-neutral-600)">codemap ticker . — following</div>
+    <div style="border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);overflow:hidden;font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300)">
+      <div style="display:flex;align-items:center;gap:14px;padding:8px 16px;color:var(--color-neutral-500)">
+        <span style="color:var(--cm-agent)">codemap</span><span>~/code/codemap</span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:var(--cm-agent);animation:cm-pulse 1.8s ease-out infinite"></span><span style="color:var(--color-neutral-300)">following claude</span><span>2s ago</span></span>
+        <span style="color:var(--color-neutral-600)">f follow · q quit</span>
+      </div>
+      <div style="height:1px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent)"></div>
+      <div style="padding:10px 16px 12px;display:flex;flex-direction:column">
+        <div style="color:var(--color-neutral-500)">codemap-daemon <span style="color:var(--color-neutral-700)">›</span> resolver.rs <span style="color:var(--color-neutral-700)">›</span> Resolver</div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="color:var(--cm-agent);font-size:14px">● resolve</span><span style="color:var(--color-neutral-600)">resolver.rs:15</span><span style="margin-left:auto;color:var(--color-neutral-600)">fn · <span style="color:var(--cm-warn)">3 of 4 call sites unresolved</span></span></div>
+        <div style="height:8px"></div>
+        <div style="display:grid;grid-template-columns:96px minmax(0,1fr) 72px minmax(0,1fr);column-gap:12px">
+          <span style="color:var(--color-neutral-600)">called by</span><span>handle_hook_line <span style="color:var(--color-neutral-700)">server.rs</span>   run <span style="color:var(--color-neutral-700)">watch.rs</span></span>
+          <span style="color:var(--color-neutral-600)">calls</span><span>same_file</span>
+          <span style="color:var(--color-neutral-600)">routes</span><span style="color:var(--cm-warn)">none found <span style="color:var(--color-neutral-600)">— unknown, not unreachable</span></span>
+          <span style="color:var(--color-neutral-600)">agent</span><span>claude <span style="color:var(--color-neutral-700)">via hook · pane %19</span></span>
+        </div>
+        <div style="height:8px"></div>
+        <div style="display:flex;gap:18px;align-items:baseline"><span style="color:var(--color-neutral-600)">trail</span>
+          <span style="color:var(--cm-agent)">resolve</span><span style="color:var(--cm-agent);opacity:.7">touch</span><span style="color:var(--color-neutral-300);opacity:.75">handle_hook_line</span><span style="color:var(--color-neutral-400);opacity:.6">normalize</span><span style="color:var(--color-neutral-500);opacity:.5">parse_patch</span><span style="color:var(--color-neutral-600)">same_file</span><span style="color:var(--color-neutral-700)">run</span>
+          <span style="margin-left:auto;color:var(--color-neutral-700)">90s half-life</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;width:100%">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">ticker — detached (you steered in the browser)</div>
+      <div style="border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300)">
+        <div style="display:flex;gap:14px;padding:8px 16px;color:var(--color-neutral-500)"><span style="color:var(--color-text)">codemap</span><span style="margin-left:auto;display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-neutral-700)"></span>detached</span><span style="color:var(--color-neutral-600)">f re-attach</span></div>
+        <div style="height:1px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent)"></div>
+        <div style="padding:10px 16px 12px">
+          <div style="color:var(--color-neutral-500)">codemap-daemon <span style="color:var(--color-neutral-700)">›</span> adapter.rs</div>
+          <div style="display:flex;gap:14px;align-items:baseline"><span style="color:var(--color-text);font-size:14px">○ parse_patch</span><span style="color:var(--color-neutral-600)">adapter.rs:140</span></div>
+          <div style="color:var(--color-neutral-600);margin-top:8px">agent is now in <span style="color:var(--cm-agent)">resolve</span> · 3 touches since you detached</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">ticker — no daemon</div>
+      <div style="border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300)">
+        <div style="display:flex;gap:14px;padding:8px 16px;color:var(--color-neutral-500)"><span style="color:var(--color-text)">codemap</span><span style="margin-left:auto">not running</span></div>
+        <div style="height:1px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent)"></div>
+        <div style="padding:10px 16px 12px;color:var(--color-neutral-500)">
+          <div>No daemon for <span style="color:var(--color-neutral-300)">~/code/codemap</span>.</div>
+          <div style="margin-top:8px;color:var(--color-neutral-600)">start one in another pane, this will attach on its own</div>
+          <div style="color:var(--cm-dep)">$ codemap start .</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="width:100%">
+    <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600)">commands</div>
+    <div style="font-size:13px;color:var(--color-neutral-500);margin-top:4px;max-width:560px;line-height:1.55">Every command answers three things in order: what happened, where to look next, what codemap is unsure about. Labels are dim, values are bright, caveats are sentences.</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;width:100%">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">codemap start .</div>
+      <pre style="margin:0;padding:14px 16px;border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);white-space:pre-wrap"><span style="color:var(--color-neutral-600)">$</span> codemap start .
+
+<span style="color:var(--cm-route)">✓</span> indexed   <span style="color:var(--color-text)">~/code/codemap</span>   <span style="color:var(--color-neutral-600)">23 files · 96 nodes · 70 edges · 0.8s</span>
+<span style="color:var(--cm-route)">✓</span> watching  <span style="color:var(--color-neutral-600)">filesystem — works with any agent or by hand</span>
+<span style="color:var(--cm-route)">✓</span> hooks     <span style="color:var(--color-text)">claude</span> <span style="color:var(--color-neutral-600)">installed</span>   <span style="color:var(--color-text)">codex</span> <span style="color:var(--color-neutral-600)">installed</span>   <span style="color:var(--color-neutral-600)">gemini not found</span>
+
+  <span style="color:var(--color-neutral-600)">open</span>     <span style="color:var(--color-text)">http://127.0.0.1:7878</span>
+  <span style="color:var(--color-neutral-600)">ticker</span>   codemap ticker .
+  <span style="color:var(--color-neutral-600)">stop</span>     codemap stop .
+
+<span style="color:var(--color-neutral-600)">Skipped 6 test files and target/. Pass --all to include them.
+Call edges are heuristic — Rust resolves ~13% of internal calls here.</span></pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">codemap status .</div>
+      <pre style="margin:0;padding:14px 16px;border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);white-space:pre-wrap"><span style="color:var(--color-neutral-600)">$</span> codemap status .
+
+<span style="color:var(--cm-agent)">●</span> running   <span style="color:var(--color-text)">~/code/codemap</span>   <span style="color:var(--color-neutral-600)">pid 48213 · up 2h 14m</span>
+  <span style="color:var(--color-neutral-600)">url</span>       http://127.0.0.1:7878
+  <span style="color:var(--color-neutral-600)">agent</span>     claude <span style="color:var(--color-neutral-600)">· last hook 2s ago · pane %19</span>
+  <span style="color:var(--color-neutral-600)">index</span>     96 nodes <span style="color:var(--color-neutral-600)">· reindexed 41s ago (0.8s)</span>
+  <span style="color:var(--color-neutral-600)">focus</span>     resolver::Resolver::resolve <span style="color:var(--color-neutral-600)">· following</span>
+
+<span style="color:var(--color-neutral-600)">$</span> codemap status ~/other
+
+<span style="color:var(--color-neutral-700)">○</span> not running   <span style="color:var(--color-text)">~/other</span>
+  <span style="color:var(--color-neutral-600)">start with</span>   codemap start ~/other</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">codemap index .</div>
+      <pre style="margin:0;padding:14px 16px;border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);white-space:pre-wrap"><span style="color:var(--color-neutral-600)">$</span> codemap index .
+
+<span style="color:var(--color-text)">~/code/codemap</span>   <span style="color:var(--color-neutral-600)">rust · 23 files · 0.8s</span>
+
+  <span style="color:var(--color-neutral-600)">packages</span>    4      <span style="color:var(--color-neutral-600)">functions</span>  60
+  <span style="color:var(--color-neutral-600)">modules</span>    20      <span style="color:var(--color-neutral-600)">routes</span>      3
+  <span style="color:var(--color-neutral-600)">classes</span>     9      <span style="color:var(--color-neutral-600)">edges</span>      70
+
+<span style="color:var(--color-neutral-600)">call resolution</span>   <span style="color:var(--cm-route)">██████████████</span><span style="color:var(--color-neutral-800)">░░░░░░░░░</span>  <span style="color:var(--color-text)">60%</span> <span style="color:var(--color-neutral-600)">of 116 internal call sites</span>
+  <span style="color:var(--color-neutral-600)">resolved</span>          70
+  <span style="color:var(--color-neutral-600)">ambiguous</span>         11   <span style="color:var(--color-neutral-600)">&gt;1 candidate, not guessed</span>
+  <span style="color:var(--color-neutral-600)">needs types</span>       35   <span style="color:var(--color-neutral-600)">calls through variables</span>
+  <span style="color:var(--color-neutral-600)">external</span>          98   <span style="color:var(--color-neutral-600)">stdlib / dependencies, not counted</span>
+
+<span style="color:var(--color-neutral-600)">Containment and routes are exact. Only call edges are heuristic.
+--json for the full graph · --all to include tests and examples</span></pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">codemap reach . &lt;symbol&gt;</div>
+      <pre style="margin:0;padding:14px 16px;border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);white-space:pre-wrap"><span style="color:var(--color-neutral-600)">$</span> codemap reach . run
+
+<span style="color:var(--color-text)">3 symbols named run</span> <span style="color:var(--color-neutral-600)">— pick one:</span>
+  codemap reach . <span style="color:var(--color-text)">ticker::run</span>          <span style="color:var(--color-neutral-600)">ticker.rs:31</span>
+  codemap reach . <span style="color:var(--color-text)">server::Daemon::run</span>  <span style="color:var(--color-neutral-600)">server.rs:26</span>
+  codemap reach . <span style="color:var(--color-text)">watch::run</span>           <span style="color:var(--color-neutral-600)">watch.rs:18</span>
+
+<span style="color:var(--color-neutral-600)">$</span> codemap reach . server::ws_handler
+
+<span style="color:var(--color-text)">server::ws_handler</span> <span style="color:var(--color-neutral-600)">server.rs:140 · reached from 1 route</span>
+  <span style="color:var(--cm-route)">GET</span> /ws                 <span style="color:var(--color-neutral-600)">direct · server.rs:60</span>
+
+<span style="color:var(--color-neutral-600)">$</span> codemap reach . walker::walk
+
+<span style="color:var(--color-text)">walker::walk</span> <span style="color:var(--color-neutral-600)">walker.rs:20</span>
+  <span style="color:var(--cm-warn)">no route found</span> <span style="color:var(--color-neutral-600)">— 1 unresolved call site on the way; this is unknown, not unreachable</span>
+  <span style="color:var(--color-neutral-600)">nearest callers</span>   indexer::index_repo_opts</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">codemap install-hooks</div>
+      <pre style="margin:0;padding:14px 16px;border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);white-space:pre-wrap"><span style="color:var(--color-neutral-600)">$</span> codemap install-hooks
+
+<span style="color:var(--cm-route)">✓</span> claude   <span style="color:var(--color-neutral-600)">~/.claude/settings.json</span>   PreToolUse · PostToolUse
+<span style="color:var(--cm-route)">✓</span> codex    <span style="color:var(--color-neutral-600)">~/.codex/hooks.json</span>       PreToolUse · PostToolUse
+<span style="color:var(--color-neutral-700)">–</span> gemini   <span style="color:var(--color-neutral-600)">~/.gemini not found — skipped</span>
+
+<span style="color:var(--color-neutral-600)">Hooks cost one stat() and exit when no daemon is running.
+Codex will ask you to review and trust the hook on its first run.
+Verify:</span> codemap status . <span style="color:var(--color-neutral-600)">shows "last hook" once the agent acts.</span></pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--color-neutral-600)">codemap (no args) — the front door</div>
+      <pre style="margin:0;padding:14px 16px;border-radius:8px;background:var(--cm-surface);box-shadow:var(--shadow-sm);font:12.5px/1.7 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);white-space:pre-wrap"><span style="color:var(--color-neutral-600)">$</span> codemap
+
+<span style="color:var(--color-text)">codemap</span> <span style="color:var(--color-neutral-600)">— a live map of your codebase that follows your coding agent</span>
+
+  <span style="color:var(--color-text)">start</span> [path]        index, serve the UI, listen for hooks
+  <span style="color:var(--color-text)">ticker</span> [path]       text pane for tmux beside your agent
+  <span style="color:var(--color-text)">status</span> · <span style="color:var(--color-text)">stop</span>       daemon lifecycle
+
+  <span style="color:var(--color-text)">index</span> &lt;path&gt;        summary + call-resolution coverage, no daemon
+  <span style="color:var(--color-text)">reach</span> &lt;path&gt; &lt;sym&gt;  which routes reach a symbol, no daemon
+  <span style="color:var(--color-text)">install-hooks</span>       claude · codex · gemini
+
+<span style="color:var(--color-neutral-600)">Nothing runs until you start it. No telemetry, loopback only.</span></pre>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

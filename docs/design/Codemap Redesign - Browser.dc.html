@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://reinhart1010.github.io/aileron/aileron.lite.min.css">
+<link rel="stylesheet" href="_ds/nocturne-09853d0a-cf27-4f94-8004-eda96f4472ab/styles.css">
+<script src="_ds/nocturne-09853d0a-cf27-4f94-8004-eda96f4472ab/_ds_bundle.js"></script>
+<style>
+  :root{
+    --cm-font:"Aileron",system-ui,sans-serif;
+    --cm-mono:"Aileron",system-ui,sans-serif;
+    --cm-bg:#0e1017; --cm-surface:#171a25; --cm-line:#222636;
+    --cm-agent:#f2b45a; --cm-agent-dim:#3a2d17; --cm-agent-mid:#8a6a33;
+    --cm-route:#6fd3a0; --cm-route-dim:#2d6a4d;
+    --cm-class:#7fb0ff; --cm-class-dim:#2a3d66;
+    --cm-module:#9184d9; --cm-module-dim:#3a3466;
+    --cm-dep:#5fd0d4; --cm-dep-dim:#1f4a4d;
+    --cm-warn:#ee8a63; --cm-warn-dim:#4a2c22;
+  }
+  body{margin:0;background:radial-gradient(1200px 700px at 30% -10%,#171a2a 0%,var(--cm-bg) 60%);color:var(--color-text);font-family:var(--cm-font);overflow:hidden;-webkit-font-smoothing:antialiased}
+  input,button,.btn,.tag,.input{font-family:var(--cm-font)}
+  a{color:var(--cm-dep)} a:hover{color:var(--color-text)}
+  @keyframes cm-pulse{0%,100%{box-shadow:0 0 0 0 rgba(242,180,90,.55)}70%{box-shadow:0 0 0 6px rgba(242,180,90,0)}}
+  @keyframes cm-flow{from{stroke-dashoffset:70}to{stroke-dashoffset:0}}
+  @keyframes cm-halo{0%{transform:scale(.96);opacity:.35}100%{transform:scale(1.35);opacity:0}}
+  @keyframes cm-drift{0%{transform:translate(0,0)}50%{transform:translate(var(--dx),var(--dy))}100%{transform:translate(0,0)}}
+  @keyframes cm-twinkle{0%,100%{opacity:.15}50%{opacity:.6}}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;min-width:1040px;font-size:13px;letter-spacing:-0.005em">
+  <div style="display:flex;align-items:center;gap:20px;padding:0 24px;height:52px;flex:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="width:8px;height:8px;border-radius:2px;background:var(--cm-agent)"></span>
+      <span style="font-weight:400;font-size:17px;letter-spacing:-0.01em">codemap</span>
+    </div>
+    <span style="color:var(--color-neutral-600);font-size:12px;font-family:'Aileron',system-ui,sans-serif">{{ repoPath }}</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px">
+      {{ agentDot }}
+      <span style="color:var(--color-neutral-300)">{{ agentLine }}</span>
+      <span style="color:var(--color-neutral-600)">{{ lastEvent }}</span>
+    </div>
+    <span style="width:1px;height:16px;background:var(--color-neutral-800)"></span>
+    <span style="color:var(--color-neutral-600);font-size:12px">{{ indexLine }}</span>
+    <button onClick="{{ toggleFollow }}" class="btn {{ followClass }}" style="font-size:12px;padding:5px 12px;border-radius:6px">{{ followLabel }}</button>
+  </div>
+  <div style="height:1px;flex:none;background:var(--cm-line)"></div>
+
+  <div style="display:grid;grid-template-columns:224px minmax(0,1fr) 300px;flex:1;min-height:0">
+    <!-- outline -->
+    <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--cm-line)">
+      <div style="padding:14px 16px 6px">
+        <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;background:var(--cm-surface)">
+          <span style="color:var(--color-neutral-600);font-size:12px">⌕</span>
+          <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Search symbols, files, routes" style="flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--color-text);font:inherit;font-size:12.5px">
+          <span style="font-size:10px;color:var(--color-neutral-600);border:1px solid var(--color-neutral-800);border-radius:4px;padding:0 5px;line-height:16px">/</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 18px 6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600)">
+        <span>{{ outlineTitle }}</span><span>{{ outlineCount }}</span>
+      </div>
+      <div style="flex:1;overflow:auto;padding:0 8px 16px">
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+          <div onClick="{{ r.click }}" style="display:flex;align-items:center;gap:8px;height:28px;padding-left:{{ r.pad }}px;padding-right:8px;border-radius:6px;cursor:pointer;background:{{ r.bg }};color:{{ r.color }}" style-hover="background:var(--cm-line)">
+            <span onClick="{{ r.toggle }}" style="width:10px;flex:none;text-align:center;color:var(--color-neutral-600);font-size:9px">{{ r.caret }}</span>
+            <span style="width:7px;height:7px;flex:none;border-radius:{{ r.glyphRadius }};background:{{ r.glyphBg }};border:1px solid {{ r.glyphBorder }};transform:{{ r.glyphTransform }}"></span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-family:{{ r.font }}">{{ r.name }}</span>
+            <span style="font-size:10.5px;color:var(--color-neutral-600);flex:none">{{ r.meta }}</span>
+            <span style="width:5px;height:5px;border-radius:50%;background:var(--cm-agent);opacity:{{ r.heat }};flex:none"></span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- center -->
+    <div style="display:flex;flex-direction:column;min-width:0;min-height:0;overflow:auto">
+      <div style="padding:22px 28px 0">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-neutral-600);flex-wrap:wrap">
+          <span onClick="{{ goRoot }}" style="cursor:pointer" style-hover="color:var(--color-text)">{{ repoName }}</span>
+          <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2">
+            <span style="color:var(--color-neutral-800)">/</span><span onClick="{{ c.go }}" style="cursor:pointer;color:{{ c.color }}" style-hover="color:var(--color-text)">{{ c.name }}</span>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:14px;margin-top:8px">
+          <h4 style="margin:0;font-size:28px;font-weight:400;letter-spacing:-0.01em;font-family:var(--cm-font)">{{ selName }}</h4>
+          <span style="font-size:11px;letter-spacing:.04em;padding:2px 9px;border-radius:6px;border:1px solid {{ selKindColor }};color:{{ selKindColor }}">{{ selKind }}</span>
+          <span style="color:var(--color-neutral-500);font-size:12.5px">{{ selHint }}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:28px 28px 0;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);white-space:nowrap">
+        <span>routes</span><span>called by</span><span style="color:var(--color-neutral-400)">this</span><span>calls</span>
+      </div>
+      <div data-cm-graph="1" style="flex:1;min-height:0;padding:10px 28px 0;position:relative">
+        <div style="position:relative;height:{{ svgH }}px">
+          {{ bgField }}
+          {{ activeHalo }}
+          <svg width="100%" height="{{ svgH }}" style="position:absolute;inset:0;display:block;overflow:visible">
+            <sc-for list="{{ gEdges }}" as="e" hint-placeholder-count="4">
+              <path d="{{ e.d }}" fill="none" stroke="{{ e.stroke }}" stroke-width="1.2" stroke-dasharray="{{ e.dash }}"></path>
+              <path d="{{ e.d }}" fill="none" stroke="var(--cm-agent)" stroke-width="1.4" stroke-dasharray="6 64" stroke-linecap="round" opacity="{{ e.flow }}" style="animation:cm-flow 2.6s linear infinite"></path>
+            </sc-for>
+          </svg>
+          <sc-for list="{{ gNodes }}" as="n" hint-placeholder-count="6">
+            <div onClick="{{ n.click }}" onDoubleClick="{{ n.dbl }}" style="position:absolute;left:{{ n.x }}px;top:{{ n.y }}px;width:{{ n.w }}px;height:32px;display:flex;align-items:center;padding:0 12px;border-radius:7px;cursor:pointer;background:{{ n.fill }};border:1px {{ n.borderStyle }} {{ n.stroke }};box-shadow:{{ n.shadow }};color:{{ n.color }}" style-hover="border-color:var(--color-neutral-600)">
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12.5px 'Aileron',system-ui,sans-serif">{{ n.label }}</span>
+            </div>
+          </sc-for>
+          <sc-for list="{{ gNotes }}" as="t" hint-placeholder-count="0">
+            <span style="position:absolute;left:{{ t.x }}px;top:{{ t.y }}px;font-size:11px;color:var(--color-neutral-600);white-space:nowrap">{{ t.text }}</span>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;gap:18px;padding:14px 28px 14px;font-size:11px;color:var(--color-neutral-600);align-items:center;white-space:nowrap">
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--cm-agent)"></span>agent</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;border:1px solid var(--cm-route)"></span>route</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:1px;border:1px solid var(--cm-class);transform:rotate(45deg) scale(.85)"></span>class</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:1px;background:var(--cm-module)"></span>module</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--cm-dep)"></span>dependency</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;border-top:1px dashed var(--color-neutral-500)"></span>reachable</span>
+        <span style="margin-left:auto;overflow:hidden;text-overflow:ellipsis">click to move · Esc up · f follow</span>
+      </div>
+      <sc-if value="{{ showTrail }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:none;padding:14px 28px 18px;border-top:1px solid var(--cm-line)">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px">
+          <span>session trail</span><span style="letter-spacing:0;text-transform:none">fades on a 90s half-life</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ trailChips }}" as="t" hint-placeholder-count="5">
+            <button onClick="{{ t.click }}" style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--cm-line);background:{{ t.bg }};color:var(--color-neutral-200);font:inherit;font-size:12px;cursor:pointer;opacity:{{ t.opacity }}" style-hover="border-color:var(--color-neutral-700)">
+              <span style="width:5px;height:5px;border-radius:50%;background:var(--cm-agent)"></span>
+              <span style="font-family:'Aileron',system-ui,sans-serif">{{ t.name }}</span>
+              <span style="color:var(--color-neutral-600);font-size:11px">{{ t.ago }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+
+    <!-- inspector -->
+    <div style="display:flex;flex-direction:column;min-height:0;overflow:auto;padding:22px 24px 24px;border-left:1px solid var(--cm-line)">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600)">what this is</div>
+        <div style="font-size:15px;line-height:1.5;color:var(--color-text)">{{ purpose }}</div>
+        <sc-if value="{{ hasSig }}" hint-placeholder-val="{{ true }}">
+          <div style="font-family:var(--cm-mono);font-size:11.5px;line-height:1.5;color:var(--color-neutral-400);padding:8px 10px;border-radius:6px;background:var(--cm-surface);word-break:break-word">{{ sig }}</div>
+        </sc-if>
+        <div style="font-size:12.5px;line-height:1.55;color:var(--color-neutral-400)">{{ usage }}</div>
+        <div style="display:flex;align-items:center;gap:12px;font-size:12px;color:var(--color-neutral-500)">
+          <span style="font-family:var(--cm-mono)">{{ selLoc }}</span>
+          <a href="#" style="text-decoration:none;font-size:12px">open in editor ↗</a>
+        </div>
+      </div>
+
+      <div style="margin-top:28px">
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px"><span>how you get here</span><span style="letter-spacing:0;text-transform:none">{{ pathNote }}</span></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:12px">
+          <sc-for list="{{ pathChips }}" as="p" hint-placeholder-count="4">
+            <span style="display:flex;align-items:center;gap:6px">
+              <button onClick="{{ p.click }}" style="font-family:var(--cm-mono);font-size:12px;padding:3px 8px;border-radius:5px;border:1px solid {{ p.border }};background:{{ p.bg }};color:{{ p.color }};cursor:pointer" style-hover="border-color:var(--color-neutral-500)">{{ p.name }}</button>
+              <span style="color:var(--color-neutral-600)">{{ p.arrow }}</span>
+            </span>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="margin-top:28px">
+        <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px">reached from</div>
+        <sc-if value="{{ hasRoutes }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ routes }}" as="r" hint-placeholder-count="2">
+              <button onClick="{{ r.click }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 4px;border:0;border-top:1px solid var(--cm-line);background:transparent;color:var(--color-text);font:inherit;text-align:left;cursor:pointer" style-hover="color:var(--color-accent-300)">
+                <span style="font-size:11px;color:var(--cm-route);width:34px;font-family:var(--cm-mono)">{{ r.method }}</span>
+                <span style="font-family:'Aileron',system-ui,sans-serif;font-size:12.5px">{{ r.path }}</span>
+                <span style="margin-left:auto;font-size:11px;color:var(--color-neutral-600)">{{ r.file }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noRoutes }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:12.5px;line-height:1.55;color:var(--color-neutral-400)">
+            <span style="color:var(--cm-warn)">No route found.</span> That means unknown, not unreachable — call edges are read from syntax, not types, and in Rust only ~13% of internal calls resolve.
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="margin-top:28px">
+        <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:12px">what codemap knows here</div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+          <div><div style="font-size:22px;font-weight:500;letter-spacing:-0.02em">{{ nCallers }}</div><div style="font-size:11.5px;color:var(--color-neutral-500)">callers</div></div>
+          <div><div style="font-size:22px;font-weight:500;letter-spacing:-0.02em">{{ nCallees }}</div><div style="font-size:11.5px;color:var(--color-neutral-500)">calls resolved</div></div>
+          <div><div style="font-size:22px;font-weight:500;letter-spacing:-0.02em;color:{{ unresolvedColor }}">{{ nUnresolved }}</div><div style="font-size:11.5px;color:var(--color-neutral-500)">unresolved</div></div>
+        </div>
+        <div style="display:flex;height:3px;border-radius:2px;overflow:hidden;background:var(--cm-line);margin-top:12px">
+          <div style="width:{{ resolvedPct }}%;background:var(--cm-route)"></div>
+        </div>
+        <div style="font-size:11.5px;line-height:1.55;color:var(--color-neutral-500);margin-top:8px">{{ knownNote }}</div>
+      </div>
+
+      <div style="margin-top:28px">
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px"><span>dependencies in {{ depFile }}</span><span style="letter-spacing:0;text-transform:none">{{ depSummary }}</span></div>
+        <sc-if value="{{ hasDeps }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ depRows }}" as="d" hint-placeholder-count="3">
+              <div onClick="{{ d.click }}" style="border-top:1px solid var(--cm-line);cursor:pointer" style-hover="background:var(--cm-line)">
+                <div style="display:flex;align-items:center;gap:10px;height:32px;padding:0 4px">
+                  <span style="width:5px;height:5px;border-radius:50%;background:{{ d.dot }}"></span>
+                  <span style="font-family:'Aileron',system-ui,sans-serif;font-size:12.5px;color:{{ d.color }}">{{ d.name }}</span>
+                  <span style="font-size:11px;color:var(--color-neutral-600)">{{ d.tag }}</span>
+                  <span style="margin-left:auto;font-size:11px;color:var(--color-neutral-600)">{{ d.caret }}</span>
+                </div>
+                <sc-if value="{{ d.open }}" hint-placeholder-val="{{ false }}"><div style="padding:0 4px 12px 19px;font-size:12px;line-height:1.55;color:var(--color-neutral-400)">{{ d.why }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noDeps }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:var(--color-neutral-500);line-height:1.55">Standard library and this repo only — nothing external here.</div></sc-if>
+      </div>
+
+      <div style="margin-top:28px">
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px"><span>source</span><span style="letter-spacing:0;text-transform:none;font-family:'Aileron',system-ui,sans-serif">{{ selLoc }}</span></div>
+        <pre style="margin:0;padding:12px 14px;background:var(--cm-surface);border-radius:8px;overflow:auto;max-height:280px;font:12px/1.6 'Aileron',system-ui,sans-serif;color:var(--color-neutral-300);tab-size:4">{{ source }}</pre>
+      </div>
+
+      <div style="margin-top:28px">
+        <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px">ask the agent</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ intents }}" as="i" hint-placeholder-count="5">
+            <button onClick="{{ i.send }}" class="btn {{ i.cls }}" style="font-size:12px;padding:5px 11px;border-radius:6px">{{ i.label }}</button>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:var(--color-neutral-600);margin-top:10px;line-height:1.55">Types the prompt into your agent's pane. Nothing is submitted until you press Enter.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showTrail&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;simulateAgent&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
+class Component extends DCLogic {
+  state = { ready: false, sel: null, following: true, expanded: {}, query: '', active: 230, trail: null, sent: null, depOpen: null };
+  bgField() {
+    if (this.bgEl) return this.bgEl;
+    const seed = i => ((i * 2654435761) % 1000) / 1000;
+    const dots = Array.from({ length: 34 }, (_, i) => React.createElement('span', { key: i, style: { position: 'absolute', left: `${(seed(i) * 100).toFixed(1)}%`, top: `${(seed(i + 71) * 100).toFixed(1)}%`, width: i % 5 === 0 ? 3 : 2, height: i % 5 === 0 ? 3 : 2, borderRadius: '50%', background: i % 7 === 0 ? 'var(--cm-agent-mid)' : i % 5 === 0 ? 'var(--cm-route-dim)' : i % 3 === 0 ? 'var(--cm-class-dim)' : 'var(--color-neutral-700)',
+      '--dx': `${((seed(i + 13) - .5) * 40).toFixed(0)}px`, '--dy': `${((seed(i + 29) - .5) * 30).toFixed(0)}px`,
+      animation: `cm-drift ${(18 + seed(i + 5) * 22).toFixed(1)}s ease-in-out ${(-seed(i + 3) * 20).toFixed(1)}s infinite, cm-twinkle ${(4 + seed(i + 9) * 6).toFixed(1)}s ease-in-out ${(-seed(i + 1) * 6).toFixed(1)}s infinite` } }));
+    this.bgEl = React.createElement('div', { style: { position: 'absolute', inset: '-10px -28px', overflow: 'hidden', pointerEvents: 'none' } }, dots);
+    return this.bgEl;
+  }
+  activeHalo(x, y, w) {
+    const key = `${x},${y},${w}`;
+    if (this.haloKey !== key) { this.haloKey = key; this.haloEl = React.createElement('div', { key, style: { position: 'absolute', left: x - 6, top: y - 6, width: w + 12, height: 44, borderRadius: 11, border: '1px solid var(--cm-agent)', pointerEvents: 'none', animation: 'cm-halo 2.4s ease-out infinite' } }); }
+    return this.haloEl;
+  }
+  graphRef = React.createRef();
+  async componentDidMount() {
+    this.ro = new ResizeObserver(() => { const el = this.observed; if (el) { const w = el.clientWidth - 56; if (w !== this.state.gw) this.setState({ gw: w }); } });
+    this.observeGraph();
+    this.D = await import('./codemap-data.js');
+    this.G = this.D.index(this.D.nodes, this.D.edges);
+    this.setState({ ready: true, trail: this.D.focus.trail.map(t => ({ ...t })) });
+    addEventListener('keydown', this.onKey);
+    this.timer = setInterval(() => this.simulate(), 3500);
+  }
+  observeGraph() { const el = document.querySelector('[data-cm-graph]'); if (el && this.observed !== el) { this.observed = el; this.ro.observe(el); const w = el.clientWidth - 56; if (w > 0 && w !== this.state.gw) this.setState({ gw: w }); } }
+  componentDidUpdate() { this.observeGraph(); }
+  componentWillUnmount() { removeEventListener('keydown', this.onKey); clearInterval(this.timer); if (this.ro) this.ro.disconnect(); }
+  onKey = e => { if (e.target && e.target.tagName === 'INPUT') return; if (e.key === 'f') this.setState(s => ({ following: !s.following })); if (e.key === 'Escape') this.goUp(); };
+  simulate() {
+    if (!(this.props.simulateAgent ?? false) || !this.state.ready) return;
+    const seq = [230, 231, 221, 224, 206, 250, 252, 254];
+    this.setState(s => { const next = seq[(seq.indexOf(s.active) + 1) % seq.length];
+      const trail = [{ node: next, weight: 1, ago: 'now' }, ...s.trail.filter(t => t.node !== next).map(t => ({ ...t, weight: Math.max(.05, t.weight * .78) }))].slice(0, 8);
+      return { active: next, trail }; });
+  }
+  select(id, detach) { this.setState(s => ({ sel: id, following: detach ? false : s.following })); }
+  goUp() { const n = this.G.byId.get(this.current()); if (n && n.parent != null) this.select(n.parent, true); }
+  current() { const s = this.state; return s.following ? s.active : (s.sel ?? s.active); }
+  toggle(id) { this.setState(s => ({ expanded: { ...s.expanded, [id]: !this.isOpen(id, s) } })); }
+  isOpen(id, s = this.state) { if (id in s.expanded) return s.expanded[id]; return this.G.chain(this.current()).includes(id); }
+  renderVals() {
+    const s = this.state, D = this.D, G = this.G, mono = '"Aileron",system-ui,sans-serif', sans = 'inherit';
+    const base = { repoPath: '~/code/codemap', repoName: 'codemap',
+      agentDot: React.createElement('span', { style: { width: 7, height: 7, borderRadius: '50%', background: s.following ? 'var(--cm-agent)' : 'var(--color-neutral-700)', animation: s.following ? 'cm-pulse 1.8s ease-out infinite' : 'none' } }),
+      agentLine: s.following ? 'Following claude' : 'Detached', lastEvent: s.following ? 'last event 2s ago' : 'press f to re-attach', indexLine: '96 nodes · 70 edges · watching',
+      followClass: s.following ? 'btn-primary' : 'btn-secondary', followLabel: s.following ? 'Following' : 'Follow', toggleFollow: () => this.setState({ following: !s.following }),
+      query: s.query, onQuery: e => this.setState({ query: e.target.value }), goRoot: () => this.select(1, true), showTrail: this.props.showTrail ?? true,
+      rows: [], crumbs: [], gNodes: [], gEdges: [], gNotes: [], trailChips: [], routes: [], intents: [], depRows: [], svgW: 800, svgH: 240, selName: '', selKind: '', selTagClass: 'tag-neutral', bgField: this.bgField(), activeHalo: null };
+    if (!s.ready) return base;
+    const cur = this.current(), node = G.byId.get(cur), trailW = new Map(s.trail.map(t => [t.node, t.weight])), chain = G.chain(cur), activeChain = new Set(G.chain(s.active));
+    const glyph = k => k === 'package' ? { glyphRadius: '2px', glyphBg: 'transparent', glyphBorder: 'var(--color-neutral-500)', glyphTransform: 'none' }
+      : k === 'module' ? { glyphRadius: '1px', glyphBg: 'var(--cm-module)', glyphBorder: 'var(--cm-module)', glyphTransform: 'none' }
+      : k === 'class' ? { glyphRadius: '1px', glyphBg: 'transparent', glyphBorder: 'var(--cm-class)', glyphTransform: 'rotate(45deg) scale(.8)' }
+      : k === 'route' ? { glyphRadius: '50%', glyphBg: 'transparent', glyphBorder: 'var(--cm-route)', glyphTransform: 'none' }
+      : { glyphRadius: '50%', glyphBg: 'var(--color-neutral-600)', glyphBorder: 'var(--color-neutral-600)', glyphTransform: 'scale(.7)' };
+    const mkRow = (n, depth) => { const isCur = n.id === cur, isAct = n.id === s.active, open = this.isOpen(n.id), onPath = activeChain.has(n.id);
+      return { name: n.name, pad: 8 + depth * 14, caret: n.child_count ? (open ? '▾' : '▸') : '', click: () => this.select(n.id, true), toggle: e => { e.stopPropagation(); this.toggle(n.id); },
+        bg: isCur ? 'var(--cm-surface)' : 'transparent', color: isAct ? 'var(--cm-agent)' : onPath || isCur ? 'var(--color-text)' : n.kind === 'package' ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)',
+        font: n.kind === 'package' ? sans : mono, meta: n.child_count ? String(n.child_count) : '', heat: isAct ? 1 : (trailW.get(n.id) || 0), ...glyph(n.kind) }; };
+    const rows = [], walk = (pid, depth) => { for (const id of (G.children.get(pid == null ? 'root' : pid) || [])) { const n = G.byId.get(id); rows.push(mkRow(n, depth)); if (n.child_count && this.isOpen(id)) walk(id, depth + 1); } };
+    const q = s.query.trim().toLowerCase();
+    if (q) { for (const n of D.nodes) if (n.qualified_name.toLowerCase().includes(q) || n.file.toLowerCase().includes(q)) rows.push({ ...mkRow(n, 0), caret: '', meta: n.file.split('/').pop() }); } else walk(null, 0);
+    base.rows = rows; base.outlineTitle = q ? 'matches' : 'outline'; base.outlineCount = q ? `${rows.length}` : `${D.nodes.length} nodes`;
+    base.crumbs = chain.map((id, i) => { const n = G.byId.get(id); return { name: n.name, go: () => this.select(id, true), color: i === chain.length - 1 ? 'var(--color-text)' : 'var(--color-neutral-600)' }; });
+    const isRoute = node.kind === 'route', isAct = node.id === s.active, tr = s.trail.find(t => t.node === node.id);
+    const kindColor = k => k === 'route' ? 'var(--cm-route)' : k === 'class' ? 'var(--cm-class)' : k === 'module' ? 'var(--cm-module)' : k === 'package' ? 'var(--color-neutral-400)' : 'var(--color-neutral-300)';
+    base.selName = node.name; base.selKind = node.kind; base.selKindColor = isAct ? 'var(--cm-agent)' : kindColor(node.kind); base.selTagClass = isAct ? 'tag-accent' : isRoute ? 'tag-outline' : 'tag-neutral';
+    base.selHint = isAct ? 'the agent is here now' : tr ? `agent was here ${tr.ago} ago` : node.child_count ? `${node.child_count} inside` : '';
+    base.selQualified = node.qualified_name; base.selLoc = node.file.split('/').slice(-2).join('/') + ':' + node.line_start; base.selPackage = G.byId.get(chain[0]).name;
+    // graph: routes | callers | this | callees (containers show their children as "calls")
+    const isContainer = node.child_count > 0 && node.kind !== 'class';
+    const callers = (G.rcalls.get(cur) || []).filter(id => G.byId.get(id).kind !== 'route');
+    const callees = isContainer ? (G.children.get(cur) || []) : (G.calls.get(cur) || []);
+    const gw = s.gw || 640, routes = G.routesReaching(cur), MAX = 7, H = 32, GAP = 12, svgW = gw;
+    const W = Math.min(176, Math.floor((gw - 3 * 28) / 4)), colX = [0, 1, 2, 3].map(i => Math.round(i * (gw - W) / 3));
+    const rowsN = Math.max(routes.length, callers.length, callees.length, 1), svgH = Math.max(120, Math.min(rowsN, MAX) * (H + GAP) - GAP + 8);
+    const place = (ids, col) => { const list = ids.slice(0, MAX), total = list.length * (H + GAP) - GAP, y0 = (svgH - total) / 2; return list.map((id, i) => ({ id, x: colX[col], y: y0 + i * (H + GAP) })); };
+    const pR = place(routes, 0), pC = place(callers, 1), pT = [{ id: cur, x: colX[2], y: (svgH - H) / 2 }], pE = place(callees, 3);
+    const parentName = n => n.parent != null ? G.byId.get(n.parent).name : '';
+    const mkNode = p => { const n = G.byId.get(p.id), act = p.id === s.active, isCur = p.id === cur, rt = n.kind === 'route', heat = trailW.get(p.id) || 0;
+      return { x: p.x, y: p.y, w: W, label: n.name,
+        fill: act ? 'var(--cm-agent-dim)' : isCur ? 'var(--cm-surface)' : 'var(--cm-bg)', stroke: act ? 'var(--cm-agent)' : isCur ? 'var(--color-neutral-500)' : rt ? 'var(--cm-route-dim)' : n.kind === 'class' ? 'var(--cm-class-dim)' : n.kind === 'module' ? 'var(--cm-module-dim)' : heat ? 'var(--cm-agent-mid)' : 'var(--cm-line)',
+        borderStyle: rt ? 'dashed' : 'solid', shadow: act ? '0 0 26px rgba(242,180,90,.35)' : heat ? `0 0 16px rgba(242,180,90,${(heat * .3).toFixed(2)})` : 'none',
+        color: act ? 'var(--cm-agent)' : rt ? 'var(--cm-route)' : n.kind === 'class' ? 'var(--cm-class)' : n.kind === 'module' ? 'var(--cm-module)' : isCur ? 'var(--color-text)' : 'var(--color-neutral-300)',
+        click: () => this.select(p.id, true), dbl: () => { if (n.child_count && n.kind !== 'class') this.setState(st => ({ expanded: { ...st.expanded, [p.id]: true } })); } }; };
+    base.gNodes = [...pR, ...pC, ...pT, ...pE].map(mkNode); base.svgW = svgW; base.svgH = svgH;
+    const actPos = [...pR, ...pC, ...pT, ...pE].find(p => p.id === s.active); base.activeHalo = actPos ? this.activeHalo(actPos.x, actPos.y, W) : null;
+    const t = pT[0], mid = t.y + H / 2, curve = (x1, y1, x2, y2) => `M${x1},${y1} C${x1 + 40},${y1} ${x2 - 40},${y2} ${x2},${y2}`;
+    const lit = id => id === s.active || trailW.has(id);
+    base.gEdges = [
+      ...pR.map(p => ({ d: curve(p.x + W, p.y + H / 2, t.x, mid), stroke: 'var(--cm-route-dim)', dash: '3 4', flow: 0 })),
+      ...pC.map(p => ({ d: curve(p.x + W, p.y + H / 2, t.x, mid), stroke: lit(p.id) ? 'var(--cm-agent-mid)' : 'var(--cm-line)', dash: '', flow: lit(p.id) || cur === s.active ? .9 : .35 })),
+      ...pE.map(p => ({ d: curve(t.x + W, mid, p.x, p.y + H / 2), stroke: lit(p.id) ? 'var(--cm-agent-mid)' : 'var(--cm-line)', dash: isContainer ? '2 3' : '', flow: isContainer ? 0 : lit(p.id) || cur === s.active ? .9 : .35 })),
+    ];
+    const notes = [], more = (arr, col) => { if (arr.length > MAX) notes.push({ x: colX[col] + 10, y: svgH - 16, text: `+${arr.length - MAX} more` }); };
+    more(routes, 0); more(callers, 1); more(callees, 3);
+    if (!routes.length) notes.push({ x: colX[0] + 10, y: mid - 8, text: 'no route found' });
+    if (!callers.length) notes.push({ x: colX[1] + 10, y: mid - 8, text: 'no callers indexed' });
+    if (!callees.length) notes.push({ x: colX[3] + 10, y: mid - 8, text: isContainer ? 'empty' : 'no resolved calls' });
+    if (isContainer) notes.push({ x: colX[3] + 10, y: -4, text: 'contents' });
+    base.gNotes = notes;
+    base.trailChips = s.trail.map(tt => { const n = G.byId.get(tt.node); return { name: n.name, ago: tt.ago === 'now' ? 'now' : `${tt.ago} ago`, opacity: .35 + tt.weight * .65, bg: tt.node === cur ? 'var(--cm-surface)' : 'transparent', click: () => this.select(tt.node, true) }; });
+    base.routes = routes.map(id => { const n = G.byId.get(id), [method, path] = n.name.split(' '); return { method, path, file: n.file.split('/').pop() + ':' + n.line_start, click: () => this.select(id, true) }; });
+    base.hasRoutes = routes.length > 0; base.noRoutes = routes.length === 0;
+    const u = node.unresolved_calls || 0, res = (G.calls.get(cur) || []).length, pct = res + u ? Math.round(res / (res + u) * 100) : 100;
+    base.nCallers = (G.rcalls.get(cur) || []).length; base.nCallees = res; base.nUnresolved = u; base.unresolvedColor = u ? 'var(--cm-warn)' : 'var(--color-neutral-600)'; base.resolvedPct = pct;
+    base.knownNote = u ? `${pct}% of call sites in this node resolved. The rest go through variables whose type isn't inferred — a caller or route may exist that codemap can't see.` : 'Every call site in this node resolved. Containment and routes are exact; call edges are heuristic.';
+    base.source = D.sourceFor(node);
+    // what this is + how you get here
+    const nm = id => G.byId.get(id).name, list = (ids, n = 3) => ids.slice(0, n).map(nm).join(', ') + (ids.length > n ? ` and ${ids.length - n} more` : '');
+    const sm = D.summaries[node.id] || {};
+    const kindWord = { function: 'function', class: 'type', module: 'file', package: 'crate', route: 'HTTP route' }[node.kind];
+    base.purpose = sm.purpose || (node.kind === 'route' ? `HTTP entry point declared in ${G.byId.get(node.parent).name}. Control enters the system here.` : `A ${kindWord} in ${G.byId.get(node.parent) ? G.byId.get(node.parent).name : 'the repo'}.`);
+    base.sig = sm.sig || ''; base.hasSig = !!sm.sig;
+    const cl = G.rcalls.get(cur) || [], ce = G.calls.get(cur) || [];
+    base.usage = node.kind === 'package' || node.kind === 'module' ? `Holds ${node.child_count} ${node.kind === 'package' ? 'files' : 'symbols'}${modIds.length ? `; depends on ${[...seen.keys()].slice(0, 3).join(', ') || 'nothing external'}` : ''}.`
+      : (cl.length ? `Called by ${list(cl)}. ` : 'No indexed callers — likely an entry point or reached dynamically. ') + (ce.length ? `Calls ${list(ce)}.` : 'Calls nothing codemap can see.');
+    // walk callers upward to the outermost entry
+    const path = [cur]; const seenP = new Set(path); let hop = cur, g2 = 0;
+    while (g2++ < 6) { const ups = (G.rcalls.get(hop) || []).filter(x => !seenP.has(x)); if (!ups.length) break; const rt = ups.find(x => G.byId.get(x).kind === 'route'); hop = rt ?? ups[0]; path.unshift(hop); seenP.add(hop); if (rt) break; }
+    base.pathChips = path.map((id, i) => { const n = G.byId.get(id), last = i === path.length - 1, rt = n.kind === 'route';
+      return { name: n.name, arrow: last ? '' : '→', click: () => this.select(id, true), border: last ? 'var(--cm-agent-mid)' : rt ? 'var(--cm-route-dim)' : 'var(--cm-line)', bg: last ? 'var(--cm-agent-dim)' : 'transparent', color: last ? 'var(--cm-agent)' : rt ? 'var(--cm-route)' : 'var(--color-neutral-300)' }; });
+    const top = G.byId.get(path[0]);
+    base.pathNote = path.length === 1 ? 'nothing indexed calls this' : top.kind === 'route' ? 'from a route' : top.name === 'main' ? 'from the binary\'s entry point' : `${path.length - 1} hop${path.length > 2 ? 's' : ''} up, then unknown`;
+    // dependencies: reference list for the file, never nodes
+    const modId = chain.find(id => G.byId.get(id).kind === 'module');
+    const modIds = node.kind === 'package' ? (G.children.get(node.id) || []) : modId != null ? [modId] : [];
+    const seen = new Map(); for (const m of modIds) for (const d of (D.deps[m] || [])) if (!seen.has(d.name)) seen.set(d.name, d);
+    const used = new Set(D.symDeps[node.id] || []), isSym = node.kind === 'function' || node.kind === 'class' || node.kind === 'route';
+    base.depFile = node.kind === 'package' ? node.name : modId != null ? G.byId.get(modId).name : '';
+    base.depRows = [...seen.values()].sort((a, b) => (used.has(b.name) - used.has(a.name)) || a.name.localeCompare(b.name)).map(d => { const hot = used.has(d.name), open = s.depOpen === d.name;
+      return { name: d.name, why: d.why, open, tag: hot ? `used by ${node.name}` : 'crate', caret: open ? 'why ↑' : 'why ↓', dot: hot ? 'var(--cm-dep)' : 'var(--color-neutral-800)', color: hot ? 'var(--cm-dep)' : isSym ? 'var(--color-neutral-500)' : 'var(--color-neutral-300)', click: () => this.setState({ depOpen: open ? null : d.name }) }; });
+    base.hasDeps = base.depRows.length > 0; base.noDeps = base.depRows.length === 0;
+    base.depSummary = base.hasDeps ? (isSym ? `${used.size} of ${base.depRows.length} touched here` : `${base.depRows.length} crates`) : '';
+    base.intents = ['Explain', 'Write tests', 'Find bugs', 'Refactor', 'Trace callers'].map(i => ({ label: s.sent === i ? 'Sent ✓' : i, cls: s.sent === i ? 'btn-primary' : 'btn-secondary', send: () => { this.setState({ sent: i }); setTimeout(() => this.setState({ sent: null }), 1400); } }));
+    return base;
+  }
+}
+</script>
+</body>
+</html>

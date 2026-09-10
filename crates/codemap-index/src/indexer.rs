@@ -148,7 +148,14 @@ pub fn index_repo_opts(root: &Path, include_all: bool) -> (Graph, IndexStats) {
         let file_s = file.to_string_lossy().to_string();
         let line_count = src.lines().count() as u32;
 
-        let mut module = Node::new(NodeKind::Module, &modpath, &file_s, 1, line_count);
+        // Display name is the file, not the dotted path: an outline row reading
+        // "resolver.rs" is legible where "crates.codemap-daemon.src.resolver"
+        // is not. The dotted form stays as the qualified name.
+        let base = file
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| modpath.clone());
+        let mut module = Node::new(NodeKind::Module, &base, &file_s, 1, line_count);
         module.qualified_name = modpath.clone();
         let module_id = g.add_node(module);
         if let Some(dir) = file.parent() {
@@ -229,6 +236,13 @@ pub fn index_repo_opts(root: &Path, include_all: bool) -> (Graph, IndexStats) {
                     g.node_mut(owner).unresolved_calls += 1;
                 } else {
                     stats.external += 1;
+                    let short = callee.rsplit('.').next().unwrap_or(&callee).to_string();
+                    if !is_language_builtin(&short) {
+                        let n = g.node_mut(owner);
+                        if !n.dependencies.contains(&short) && n.dependencies.len() < 24 {
+                            n.dependencies.push(short);
+                        }
+                    }
                 }
             }
         }
@@ -265,4 +279,63 @@ fn ensure_package(
         }
     }
     Some(id)
+}
+
+/// Constructors and builtins that are part of the language, not a dependency.
+/// Listing them as "dependencies" is noise, which is the whole complaint the
+/// default exclusions exist to answer.
+fn is_language_builtin(name: &str) -> bool {
+    const BUILTINS: &[&str] = &[
+        // Rust
+        "Some",
+        "None",
+        "Ok",
+        "Err",
+        "Vec",
+        "String",
+        "Box",
+        "Rc",
+        "Arc",
+        "new",
+        "from",
+        "into",
+        "clone",
+        "to_string",
+        "unwrap",
+        "expect",
+        "format",
+        // Python
+        "len",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "dict",
+        "list",
+        "set",
+        "tuple",
+        "print",
+        "range",
+        "isinstance",
+        "getattr",
+        "setattr",
+        "super",
+        "open",
+        "enumerate",
+        "zip",
+        "sorted",
+        "type",
+        "repr",
+        "hasattr",
+        // JS / TS / Go
+        "console",
+        "require",
+        "Object",
+        "Array",
+        "Promise",
+        "JSON",
+        "make",
+        "append",
+    ];
+    BUILTINS.contains(&name)
 }

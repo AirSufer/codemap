@@ -9,9 +9,9 @@ what it touches. `codemap` answers that continuously, without you asking.
 - **Live focus.** Hooks from Claude Code, Codex CLI and Gemini CLI report every
   read and edit; the graph highlights the exact function being touched and fades a
   trail of what came before.
-- **Universe navigation.** Packages contain modules contain classes contain
-  functions. Click to descend, `Esc` to ascend. Only one container renders at a
-  time, so a 12,000-function repo never becomes a hairball.
+- **Outline, not a hairball.** A collapsible tree of packages, modules, classes
+  and functions on the left; `/` to search. The centre shows one symbol and its
+  immediate neighbourhood in four columns: routes, called by, this, calls.
 - **Reachability.** Select any function and see which API routes can reach it.
 - **Works with any agent.** A filesystem watcher covers everything, including you
   editing by hand. Hooks are enrichment, not a requirement.
@@ -121,6 +121,11 @@ between 788 modules (46% of them tests) and 360 modules of actual source.
 
 Python, TypeScript/JavaScript, Go, Rust. Route detection covers FastAPI/Flask,
 Express-style, Go `HandleFunc` and chi/gin, and axum.
+
+## Design
+
+`docs/design/` holds the Claude Design canvas this UI was built from, including
+"current vs redesign" artboards for both the browser and the terminal.
 
 ## Status
 

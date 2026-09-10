@@ -37,6 +37,7 @@ pub struct WireNode {
     pub line_start: u32,
     pub line_end: u32,
     pub unresolved_calls: u32,
+    pub dep_count: u32,
     /// Containment parent, so the client can build the nested scale levels.
     pub parent: Option<u32>,
     pub child_count: u32,
@@ -61,6 +62,9 @@ pub struct DetailPayload {
     pub callees: Vec<u32>,
     pub routes: Vec<u32>,
     pub unresolved_calls: u32,
+    pub dependencies: Vec<String>,
+    /// Calls from this node that did resolve, for the knows-here panel.
+    pub resolved_calls: u32,
 }
 
 pub struct Inner {
@@ -122,6 +126,8 @@ impl AppState {
             callees: g.graph.callees(nid).iter().map(|x| x.0).collect(),
             routes: g.graph.routes_reaching(nid).iter().map(|x| x.0).collect(),
             unresolved_calls: n.unresolved_calls,
+            dependencies: n.dependencies.clone(),
+            resolved_calls: g.graph.callees(nid).len() as u32,
         }))
     }
 
@@ -207,6 +213,7 @@ pub fn build_graph_payload(graph: &Graph, root: &Path) -> GraphPayload {
             line_start: n.line_start,
             line_end: n.line_end,
             unresolved_calls: n.unresolved_calls,
+            dep_count: n.dependencies.len() as u32,
             parent: parent[n.id.0 as usize],
             child_count: child_count[n.id.0 as usize],
         })
