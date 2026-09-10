@@ -1,10 +1,11 @@
+mod explore;
 mod hooks;
 mod ticker;
 
 use clap::{Parser, Subcommand};
 use codemap_graph::NodeKind;
 use codemap_index::indexer::index_repo;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 #[derive(Parser)]
@@ -111,6 +112,21 @@ enum Cmd {
         #[arg(long)]
         unresolved: bool,
     },
+    /// Full-screen map with vim keys
+    Explore {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Open the browser UI, starting the daemon if needed (alias: -ui)
+    Ui {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Open the terminal UI, starting the daemon if needed (alias: -term)
+    Term {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     /// Where your agent is right now (needs a running daemon)
     Agent {
         #[arg(default_value = ".")]
@@ -121,7 +137,17 @@ enum Cmd {
 }
 
 fn main() -> ExitCode {
-    let Some(cmd) = Cli::parse().cmd else {
+    // `codemap -ui .` and `codemap -term <dir>` are the two commands a developer
+    // actually types. Clap has no shape for a single-dash multi-letter flag, so
+    // they are rewritten into subcommands before parsing.
+    let argv: Vec<String> = std::env::args()
+        .map(|a| match a.as_str() {
+            "-ui" | "--ui" => "ui".to_string(),
+            "-term" | "--term" | "-tui" => "term".to_string(),
+            _ => a,
+        })
+        .collect();
+    let Some(cmd) = Cli::parse_from(argv).cmd else {
         return front_door();
     };
     match cmd {
@@ -143,6 +169,9 @@ fn main() -> ExitCode {
             unresolved,
         } => cmd_hops(path, symbol, Dir::Out, vimgrep, unresolved),
         Cmd::Agent { path, vimgrep } => cmd_agent(path, vimgrep),
+        Cmd::Explore { path } => cmd_explore(path, false),
+        Cmd::Ui { path } => cmd_ui(path),
+        Cmd::Term { path } => cmd_explore(path, true),
         Cmd::Index { path, json, all } => {
             let (g, st) = codemap_index::indexer::index_repo_opts(&path, all);
             if json {
@@ -609,7 +638,7 @@ fn cmd_agent(path: PathBuf, vimgrep: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn http_get(port: u16, path: &str) -> Option<String> {
+pub(crate) fn http_get(port: u16, path: &str) -> Option<String> {
     use std::io::{Read, Write};
     let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
     write!(
@@ -620,4 +649,64 @@ fn http_get(port: u16, path: &str) -> Option<String> {
     let mut buf = String::new();
     s.read_to_string(&mut buf).ok()?;
     buf.split_once("\r\n\r\n").map(|(_, b)| b.to_string())
+}
+
+/// Starts a daemon for `root` if none is running, and returns its port.
+/// Both `-ui` and `-term` are one-command entry points, so neither should make
+/// the developer start a daemon by hand first.
+fn ensure_daemon(root: &Path) -> Option<u16> {
+    if codemap_daemon::server::is_running(root) {
+        return codemap_daemon::server::daemon_port(root);
+    }
+    let exe = std::env::current_exe().ok()?;
+    std::process::Command::new(exe)
+        .arg("start")
+        .arg(root)
+        .arg("--port")
+        .arg("0")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    for _ in 0..80 {
+        if codemap_daemon::server::is_running(root) {
+            return codemap_daemon::server::daemon_port(root);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    None
+}
+
+fn cmd_ui(path: PathBuf) -> ExitCode {
+    let root = abs(path);
+    let Some(port) = ensure_daemon(&root) else {
+        eprintln!("codemap: could not start a daemon for {}", root.display());
+        return ExitCode::FAILURE;
+    };
+    let url = format!("http://127.0.0.1:{port}");
+    println!("codemap  {}", root.display());
+    println!("  open      {url}");
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(opener).arg(&url).status();
+    ExitCode::SUCCESS
+}
+
+fn cmd_explore(path: PathBuf, ensure: bool) -> ExitCode {
+    let root = abs(path);
+    let port = if ensure {
+        ensure_daemon(&root)
+    } else {
+        codemap_daemon::server::daemon_port(&root)
+    };
+    match explore::run(&root, port) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("codemap: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }

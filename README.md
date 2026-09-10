@@ -32,15 +32,53 @@ cargo build --release        # single binary, no runtime, no node_modules
 
 ## Use
 
+Two commands cover almost everything. Both start a daemon if one is not
+already running.
+
 ```sh
-codemap start .              # index, serve the UI, open a socket for hooks
-codemap install-hooks        # write hook config for installed agents
-codemap ticker .             # optional text pane, for tmux beside your agent
-codemap status .
-codemap stop .
+codemap -ui .                # browser map, opens your browser
+codemap -term <project_dir>  # full-screen terminal map, vim keys
 ```
 
-Then open the printed `http://127.0.0.1:7878`.
+The rest:
+
+```sh
+codemap install-hooks        # write hook config for installed agents
+codemap ticker .             # 10-row ambient pane for tmux beside your agent
+codemap status . / stop .
+```
+
+### Terminal map
+
+Three Miller columns — parent, current, preview — driven by vim keys.
+
+```
+h j k l        parent · down · up · into (counts work: 5j)
+gg G           first · last          ctrl-o ctrl-i   walk the jumplist
+gr gc gR       callers · calls · routes
+ga gf gp       agent · file · crate  ] [             next · prev caller
+e y m '        editor · yank · marks f               toggle follow
+/ : ?          search · command · help
+```
+
+`g` opens a which-key popup, so none of it has to be memorised.
+
+### Inside vim
+
+Every hop is also a CLI verb with `--vimgrep` output, which drops straight into
+the quickfix list. No plugin, two lines in a vimrc:
+
+```vim
+nnoremap gr :cexpr system('codemap callers . '.expand('<cword>').' --vimgrep')<CR>:copen<CR>
+nnoremap ga :cexpr system('codemap agent . --vimgrep')<CR>:cc<CR>
+```
+
+```sh
+codemap callers . <sym> --vimgrep   # crates/.../server.rs:88:17: handle_hook_line → resolve
+codemap calls   . <sym> --vimgrep   # add --unresolved to list what could not resolve
+codemap reach   . <sym> --vimgrep   # exit 2 when no route is found
+codemap agent   .       --vimgrep   # where your agent is right now
+```
 
 Without starting the daemon, two offline commands work anywhere:
 
