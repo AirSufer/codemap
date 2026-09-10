@@ -19,24 +19,6 @@ const VENDOR: [&str; 14] = [
     ".tox",
 ];
 
-/// Real code, but not what you are navigating when you ask "where does this
-/// work land?". Excluded by default; `--all` brings them back.
-const NOISE: [&str; 13] = [
-    "tests",
-    "test",
-    "__tests__",
-    "spec",
-    "e2e",
-    "fixtures",
-    "testdata",
-    "migrations",
-    "alembic",
-    "examples",
-    "docs",
-    "stories",
-    "scripts",
-];
-
 /// Machine-written files. Indexing them buries hand-written code.
 fn is_generated(p: &Path) -> bool {
     let name = p
@@ -74,13 +56,55 @@ fn is_test_file(p: &Path) -> bool {
         || name.ends_with(".test.js")
         || name.ends_with(".spec.ts")
         || name.ends_with(".spec.js")
+        || name.ends_with(".bench.ts")
+}
+
+/// Matches on word tokens, not the whole name, so `doc-tests`, `test-utils`
+/// and `unit_tests` are caught alongside a plain `tests`. Splitting on the
+/// separators avoids false hits like `testimonials` or `contest`.
+fn is_noise_dir(name: &str) -> bool {
+    const TOKENS: &[&str] = &[
+        "test",
+        "tests",
+        "spec",
+        "specs",
+        "e2e",
+        "fixture",
+        "fixtures",
+        "mock",
+        "mocks",
+        "bench",
+        "benches",
+        "benchmark",
+        "benchmarks",
+        "example",
+        "examples",
+        "doc",
+        "docs",
+        "demo",
+        "demos",
+        "migration",
+        "migrations",
+        "alembic",
+        "script",
+        "scripts",
+        "story",
+        "stories",
+    ];
+    let lower = name.to_ascii_lowercase();
+    if TOKENS.contains(&lower.as_str()) {
+        return true;
+    }
+    lower
+        .split(['-', '_', '.'])
+        .any(|tok| TOKENS.contains(&tok))
 }
 
 fn excluded(name: &str, include_all: bool) -> bool {
     if VENDOR.contains(&name) {
         return true;
     }
-    !include_all && NOISE.contains(&name.to_ascii_lowercase().as_str())
+    !include_all && is_noise_dir(name)
 }
 
 pub fn walk_repo(root: &Path) -> Vec<PathBuf> {

@@ -16,12 +16,12 @@ body{margin:0;height:100vh;overflow:hidden;background:radial-gradient(1200px 700
 #app{display:flex;flex-direction:column;height:100vh}
 
 /* ---- header ---- */
-header{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
+header{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--line);flex:0 0 auto;white-space:nowrap}
 .brand{display:flex;align-items:center;gap:8px;font-weight:600}
 .brand i{width:9px;height:9px;border-radius:2px;background:var(--module);display:inline-block}
-.path{color:var(--dim)}
+.path{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:34vw;direction:rtl;text-align:left}
 .spacer{flex:1}
-.hstat{color:var(--dim);font-size:12px}
+.hstat{color:var(--dim);font-size:12px;white-space:nowrap}
 .hstat b{color:var(--text);font-weight:500}
 .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px}
 .dot.on{background:var(--agent);animation:pulse 2.4s ease-out infinite}
@@ -33,7 +33,7 @@ header{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:
 
 /* ---- 3 panes ---- */
 main{flex:1;display:flex;min-height:0}
-#outline{width:270px;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#outline{width:270px;flex:0 0 auto;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 #search{margin:12px;padding:7px 10px;background:var(--surface);border:1px solid var(--line);
         border-radius:6px;color:var(--text);font:inherit;font-size:12px;outline:none}
 #search:focus{border-color:var(--module)}
@@ -52,7 +52,7 @@ main{flex:1;display:flex;min-height:0}
 .k-class{background:var(--class)} .k-function{background:var(--dim);border-radius:50%}
 .k-route{background:var(--route);border-radius:50%}
 
-#center{flex:1;display:flex;flex-direction:column;min-width:0;overflow:auto}
+#center{flex:1;display:flex;flex-direction:column;min-width:0;overflow-x:hidden;overflow-y:auto}
 #crumbs{padding:14px 22px 0;color:var(--dim);font-size:12px}
 #crumbs span{cursor:pointer} #crumbs span:hover{color:var(--text)}
 #crumbs b{color:var(--text);font-weight:500}
@@ -60,16 +60,17 @@ main{flex:1;display:flex;min-height:0}
 #title h1{margin:0;font-size:27px;font-weight:500;letter-spacing:-.01em}
 .badge{padding:2px 8px;border-radius:4px;background:var(--surface2);color:var(--dim);font-size:11px}
 #here{color:var(--agent);font-size:12px}
-#nb{margin:16px 22px 0;position:relative;min-height:170px}
-.cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+#nb{margin:16px 22px 0;position:relative;min-height:170px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.col{min-width:0}
 .col h5{margin:0 0 10px;color:var(--dimmer);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
 .pill{display:flex;align-items:center;gap:6px;padding:6px 9px;margin-bottom:6px;border-radius:6px;
       background:var(--surface);border:1px solid var(--line);cursor:pointer;font-size:12px}
 .pill:hover{border-color:var(--module)}
 .pill.this{border-color:var(--agent);background:#2a2113}
 .pill.route{border-color:#2f5f47}
-.pill .f{margin-left:auto;color:var(--dimmer);font-size:10px}
-.pill .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill .f{margin-left:auto;color:var(--dimmer);font-size:10px;flex:0 100000 auto;min-width:0;overflow:hidden;text-overflow:clip;white-space:nowrap}
+.pill .nm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .none{color:var(--dimmer);font-size:12px;padding:6px 0}
 .legend{margin:14px 22px 0;color:var(--dimmer);font-size:11px;display:flex;gap:16px;flex-wrap:wrap}
 #trail{margin:22px 22px 26px;border-top:1px solid var(--line);padding-top:14px}
@@ -81,7 +82,7 @@ main{flex:1;display:flex;min-height:0}
 .chip i{width:6px;height:6px;border-radius:50%;background:var(--agent)}
 .chip .ago{color:var(--dimmer);font-size:11px}
 
-#panel{width:370px;border-left:1px solid var(--line);overflow:auto;padding:16px 18px 40px}
+#panel{width:370px;flex:0 0 auto;min-width:0;border-left:1px solid var(--line);overflow:auto;padding:16px 18px 40px}
 .sec{margin-bottom:22px}
 .sec h4{margin:0 0 9px;color:var(--dimmer);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
 .qn{font-size:15px;word-break:break-all;margin-bottom:5px}
@@ -102,6 +103,8 @@ pre{margin:0;padding:10px;background:var(--surface);border:1px solid var(--line)
 .dtag{padding:2px 7px;border-radius:4px;background:var(--surface);border:1px solid var(--line);
       color:var(--dep);font-size:11px}
 #empty{color:var(--dimmer);padding:60px 20px;text-align:center;line-height:1.7}
+@media (max-width:1240px){ #panel{width:310px} #outline{width:225px} }
+@media (max-width:1040px){ #panel{width:270px} #outline{width:200px} .cols{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:16px} }
 </style>
 
 <div id="app">
@@ -320,7 +323,11 @@ function applyFocus(f){
   el('agentst').innerHTML = f.active==null
     ? `<span class="dot off"></span>waiting for your agent`
     : `<span class="dot ${f.following?'on':'off'}"></span>${f.following?'Following':'Detached ·'} <b>${esc(f.agent)}</b>${ago?` · last event ${ago}`:''}`;
-  if(f.following && f.active!=null){ sel=null; for(const a of chain(f.active)) expanded.add(a); send({type:'detail', id:f.active}); }
+  if(f.following && f.active!=null){ sel=null; for(const a of chain(f.active)) expanded.add(a); }
+  // Always fill the inspector for whatever is on screen. Requiring a click
+  // left the panel reading "Select a symbol" while the centre showed a symbol.
+  const showing = sel!=null ? sel : f.active;
+  if(showing!=null && (!detail || detail.id!==showing)) send({type:'detail', id:showing});
   renderTree(); renderCenter(); renderTrail();
 }
 function setFollow(on){ if(focus.following!==on) send({type:'follow', on}); }
