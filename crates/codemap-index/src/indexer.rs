@@ -7,12 +7,9 @@ use std::path::Path;
 
 pub fn extractor_for(path: &Path) -> Option<Box<dyn LanguageExtractor>> {
     let ext = path.extension()?.to_str()?;
-    for e in all_extractors() {
-        if e.extensions().contains(&ext) {
-            return Some(e);
-        }
-    }
-    None
+    all_extractors()
+        .into_iter()
+        .find(|e| e.extensions().contains(&ext))
 }
 
 fn all_extractors() -> Vec<Box<dyn LanguageExtractor>> {
@@ -66,6 +63,13 @@ impl SymbolTable {
         self.resolve_bare(callee)
     }
 
+    /// True when the name IS indexed but matches more than one symbol.
+    /// Distinguishes "we could not choose" from "it lives outside this repo".
+    fn is_ambiguous(&self, callee: &str) -> bool {
+        let tail = callee.rsplit('.').next().unwrap_or(callee);
+        self.by_bare.get(tail).map(|v| v.len() > 1).unwrap_or(false)
+    }
+
     fn resolve_bare(&self, name: &str) -> Option<NodeId> {
         match self.by_bare.get(name) {
             Some(v) if v.len() == 1 => Some(v[0]),
@@ -74,7 +78,42 @@ impl SymbolTable {
     }
 }
 
+/// Why a call site produced no edge. These are very different failures and
+/// must not be reported as one number: an unindexed callee is usually stdlib
+/// or a third-party package, which is expected and harmless, whereas an
+/// ambiguous or undeterminable callee is real missing coverage.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct IndexStats {
+    pub calls_total: usize,
+    /// Resolved to a node in this repo.
+    pub resolved: usize,
+    /// Extractor could not determine the callee name at all (see spec section 7).
+    pub undeterminable: usize,
+    /// Name known, but no symbol with that name is indexed -- almost always
+    /// stdlib or a third-party dependency, i.e. legitimately outside the graph.
+    pub external: usize,
+    /// Name known and indexed, but more than one candidate matched. Treated as
+    /// unresolved rather than guessed.
+    pub ambiguous: usize,
+}
+
+impl IndexStats {
+    /// Share of call sites that resolved, counting only calls that could
+    /// plausibly target this repo (i.e. excluding external/stdlib calls).
+    pub fn internal_resolution_pct(&self) -> f64 {
+        let denom = self.resolved + self.undeterminable + self.ambiguous;
+        if denom == 0 {
+            return 100.0;
+        }
+        100.0 * self.resolved as f64 / denom as f64
+    }
+}
+
 pub fn index_repo(root: &Path) -> Graph {
+    index_repo_with_stats(root).0
+}
+
+pub fn index_repo_with_stats(root: &Path) -> (Graph, IndexStats) {
     let mut g = Graph::new();
     let mut table = SymbolTable::default();
     // (owner node id, callee string, resolvable flag)
@@ -148,18 +187,30 @@ pub fn index_repo(root: &Path) -> Graph {
     }
 
     // Pass two: resolve callees against the completed table.
+    let mut stats = IndexStats::default();
     for (owner, callee, resolvable) in pending {
-        let target = if resolvable {
-            table.resolve(&callee)
-        } else {
-            None
-        };
-        match target {
-            Some(t) if t != owner => g.add_edge(owner, t, EdgeKind::Calls),
-            Some(_) => {} // self-recursion, not interesting
-            None => g.node_mut(owner).unresolved_calls += 1,
+        stats.calls_total += 1;
+        if !resolvable {
+            stats.undeterminable += 1;
+            g.node_mut(owner).unresolved_calls += 1;
+            continue;
+        }
+        match table.resolve(&callee) {
+            Some(t) if t != owner => {
+                g.add_edge(owner, t, EdgeKind::Calls);
+                stats.resolved += 1;
+            }
+            Some(_) => stats.resolved += 1, // self-recursion; counted, no edge
+            None => {
+                if table.is_ambiguous(&callee) {
+                    stats.ambiguous += 1;
+                    g.node_mut(owner).unresolved_calls += 1;
+                } else {
+                    stats.external += 1;
+                }
+            }
         }
     }
 
-    g
+    (g, stats)
 }

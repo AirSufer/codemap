@@ -1,0 +1,15 @@
+[package]
+name = "codemap-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "codemap"
+path = "src/main.rs"
+
+[dependencies]
+codemap-graph = { path = "../codemap-graph" }
+codemap-index = { path = "../codemap-index" }
+clap.workspace = true
+serde_json.workspace = true
