@@ -9,9 +9,12 @@ what it touches. `codemap` answers that continuously, without you asking.
 - **Live focus.** Hooks from Claude Code, Codex CLI and Gemini CLI report every
   read and edit; the graph highlights the exact function being touched and fades a
   trail of what came before.
-- **Outline, not a hairball.** A collapsible tree of packages, modules, classes
-  and functions on the left; `/` to search. The centre shows one symbol and its
-  immediate neighbourhood in four columns: routes, called by, this, calls.
+- **A 3D tree you can fly through.** Project → packages → files → symbols, laid
+  out in depth and drawn on canvas. Drag to orbit, wheel to zoom, click to
+  select, `/` to jump to any symbol. Level toggles decide how deep it draws.
+- **A panel that explains, not just lists.** What a symbol is (its doc comment
+  and signature), how you get to it (the call path up to a route or entry
+  point), and how much of that codemap actually knows.
 - **Reachability.** Select any function and see which API routes can reach it.
 - **Works with any agent.** A filesystem watcher covers everything, including you
   editing by hand. Hooks are enrichment, not a requirement.

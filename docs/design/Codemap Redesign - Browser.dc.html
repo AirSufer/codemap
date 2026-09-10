@@ -33,7 +33,7 @@
   @keyframes cm-twinkle{0%,100%{opacity:.15}50%{opacity:.6}}
 </style>
 </helmet>
-<div style="display:flex;flex-direction:column;height:100vh;min-width:1040px;font-size:13px;letter-spacing:-0.005em">
+<div style="display:flex;flex-direction:column;height:100vh;min-width:0;font-size:13px;letter-spacing:-0.005em">
   <div style="display:flex;align-items:center;gap:20px;padding:0 24px;height:52px;flex:none">
     <div style="display:flex;align-items:center;gap:10px">
       <span style="width:8px;height:8px;border-radius:2px;background:var(--cm-agent)"></span>
@@ -51,9 +51,9 @@
   </div>
   <div style="height:1px;flex:none;background:var(--cm-line)"></div>
 
-  <div style="display:grid;grid-template-columns:224px minmax(0,1fr) 300px;flex:1;min-height:0">
+  <div style="display:grid;grid-template-columns:{{ outlineW }} minmax(0,1fr) minmax(260px,300px);flex:1;min-height:0">
     <!-- outline -->
-    <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--cm-line)">
+    <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden;border-right:{{ outlineBorder }}">
       <div style="padding:14px 16px 6px">
         <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;background:var(--cm-surface)">
           <span style="color:var(--color-neutral-600);font-size:12px">⌕</span>
@@ -81,6 +81,10 @@
     <div style="display:flex;flex-direction:column;min-width:0;min-height:0;overflow:auto">
       <div style="padding:22px 28px 0">
         <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-neutral-600);flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;margin-right:12px;border-radius:6px;background:var(--cm-surface);width:240px">
+            <span style="color:var(--color-neutral-600);font-size:12px">⌕</span>
+            <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Jump to symbol, file, route" style="flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--color-text);font:inherit;font-size:12.5px">
+          </div>
           <span onClick="{{ goRoot }}" style="cursor:pointer" style-hover="color:var(--color-text)">{{ repoName }}</span>
           <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2">
             <span style="color:var(--color-neutral-800)">/</span><span onClick="{{ c.go }}" style="cursor:pointer;color:{{ c.color }}" style-hover="color:var(--color-text)">{{ c.name }}</span>
@@ -92,28 +96,33 @@
           <span style="color:var(--color-neutral-500);font-size:12.5px">{{ selHint }}</span>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:28px 28px 0;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);white-space:nowrap">
-        <span>routes</span><span>called by</span><span style="color:var(--color-neutral-400)">this</span><span>calls</span>
-      </div>
-      <div data-cm-graph="1" style="flex:1;min-height:0;padding:10px 28px 0;position:relative">
-        <div style="position:relative;height:{{ svgH }}px">
-          {{ bgField }}
-          {{ activeHalo }}
-          <svg width="100%" height="{{ svgH }}" style="position:absolute;inset:0;display:block;overflow:visible">
-            <sc-for list="{{ gEdges }}" as="e" hint-placeholder-count="4">
-              <path d="{{ e.d }}" fill="none" stroke="{{ e.stroke }}" stroke-width="1.2" stroke-dasharray="{{ e.dash }}"></path>
-              <path d="{{ e.d }}" fill="none" stroke="var(--cm-agent)" stroke-width="1.4" stroke-dasharray="6 64" stroke-linecap="round" opacity="{{ e.flow }}" style="animation:cm-flow 2.6s linear infinite"></path>
-            </sc-for>
-          </svg>
-          <sc-for list="{{ gNodes }}" as="n" hint-placeholder-count="6">
-            <div onClick="{{ n.click }}" onDoubleClick="{{ n.dbl }}" style="position:absolute;left:{{ n.x }}px;top:{{ n.y }}px;width:{{ n.w }}px;height:32px;display:flex;align-items:center;padding:0 12px;border-radius:7px;cursor:pointer;background:{{ n.fill }};border:1px {{ n.borderStyle }} {{ n.stroke }};box-shadow:{{ n.shadow }};color:{{ n.color }}" style-hover="border-color:var(--color-neutral-600)">
-              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12.5px 'Aileron',system-ui,sans-serif">{{ n.label }}</span>
+      <sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:14px 28px 0;display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto">
+          <sc-for list="{{ matches }}" as="m" hint-placeholder-count="0">
+            <div onClick="{{ m.click }}" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:6px;cursor:pointer;color:{{ m.color }}" style-hover="background:var(--cm-line)">
+              <span style="width:7px;height:7px;flex:none;border-radius:{{ m.glyphRadius }};background:{{ m.glyphBg }};border:1px solid {{ m.glyphBorder }};transform:{{ m.glyphTransform }}"></span>
+              <span style="font-size:12.5px">{{ m.name }}</span><span style="font-size:11px;color:var(--color-neutral-600)">{{ m.meta }}</span>
             </div>
           </sc-for>
-          <sc-for list="{{ gNotes }}" as="t" hint-placeholder-count="0">
-            <span style="position:absolute;left:{{ t.x }}px;top:{{ t.y }}px;font-size:11px;color:var(--color-neutral-600);white-space:nowrap">{{ t.text }}</span>
-          </sc-for>
         </div>
+      </sc-if>
+      <div data-cm-glide="1" style="flex:1;min-height:300px;margin-top:22px;position:relative;overflow:hidden;border-top:1px solid var(--cm-line)">
+        {{ bgField }}
+        <canvas data-cm-canvas="1" style="position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab"></canvas>
+        <div style="position:absolute;left:16px;bottom:12px;display:flex;gap:14px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);pointer-events:none">
+          <span>project</span><span style="opacity:.8">↓ crates</span><span style="opacity:.6">↓ files open on select</span><span style="opacity:.45">↓ symbols</span>
+        </div>
+        <div style="position:absolute;right:14px;bottom:10px;display:flex;gap:6px">
+          <button onClick="{{ zoomOut }}" class="btn btn-ghost" style="font-size:12px;padding:3px 9px;border-radius:6px">whole tree</button>
+          <button onClick="{{ zoomIn }}" class="btn btn-ghost" style="font-size:12px;padding:3px 9px;border-radius:6px">to selection</button>
+        </div>
+        <sc-if value="{{ hasHover }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:{{ hv.x }}px;top:{{ hv.y }}px;width:260px;padding:12px 14px;border-radius:8px;background:var(--cm-surface);border:1px solid var(--color-neutral-700);box-shadow:0 12px 40px rgba(0,0,0,.5);pointer-events:none;z-index:5">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14px;color:var(--color-text)">{{ hv.name }}</span><span style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:{{ hv.kindColor }}">{{ hv.kind }}</span></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--color-neutral-300);margin-top:6px">{{ hv.purpose }}</div>
+            <div style="display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--color-neutral-500)"><span>{{ hv.callers }}</span><span>{{ hv.calls }}</span><span style="margin-left:auto">{{ hv.file }}</span></div>
+          </div>
+        </sc-if>
       </div>
       <div style="display:flex;gap:18px;padding:14px 28px 14px;font-size:11px;color:var(--color-neutral-600);align-items:center;white-space:nowrap">
         <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--cm-agent)"></span>agent</span>
@@ -122,7 +131,7 @@
         <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:1px;background:var(--cm-module)"></span>module</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--cm-dep)"></span>dependency</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;border-top:1px dashed var(--color-neutral-500)"></span>reachable</span>
-        <span style="margin-left:auto;overflow:hidden;text-overflow:ellipsis">click to move · Esc up · f follow</span>
+        <span style="margin-left:auto;overflow:hidden;text-overflow:ellipsis">drag to orbit · wheel to zoom · hover for detail · click to select · f follow</span>
       </div>
       <sc-if value="{{ showTrail }}" hint-placeholder-val="{{ true }}">
       <div style="flex:none;padding:14px 28px 18px;border-top:1px solid var(--cm-line)">
@@ -240,9 +249,9 @@
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;showTrail&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;simulateAgent&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;showOutline&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;showTrail&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;simulateAgent&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
 class Component extends DCLogic {
-  state = { ready: false, sel: null, following: true, expanded: {}, query: '', active: 230, trail: null, sent: null, depOpen: null };
+  state = { ready: false, sel: null, following: true, expanded: {}, query: '', active: 230, trail: null, sent: null, depOpen: null, hover: null };
   bgField() {
     if (this.bgEl) return this.bgEl;
     const seed = i => ((i * 2654435761) % 1000) / 1000;
@@ -257,20 +266,130 @@ class Component extends DCLogic {
     if (this.haloKey !== key) { this.haloKey = key; this.haloEl = React.createElement('div', { key, style: { position: 'absolute', left: x - 6, top: y - 6, width: w + 12, height: 44, borderRadius: 11, border: '1px solid var(--cm-agent)', pointerEvents: 'none', animation: 'cm-halo 2.4s ease-out infinite' } }); }
     return this.haloEl;
   }
-  graphRef = React.createRef();
   async componentDidMount() {
-    this.ro = new ResizeObserver(() => { const el = this.observed; if (el) { const w = el.clientWidth - 56; if (w !== this.state.gw) this.setState({ gw: w }); } });
-    this.observeGraph();
     this.D = await import('./codemap-data.js');
     this.G = this.D.index(this.D.nodes, this.D.edges);
+    this.layout();
     this.setState({ ready: true, trail: this.D.focus.trail.map(t => ({ ...t })) });
     addEventListener('keydown', this.onKey);
     this.timer = setInterval(() => this.simulate(), 3500);
   }
-  observeGraph() { const el = document.querySelector('[data-cm-graph]'); if (el && this.observed !== el) { this.observed = el; this.ro.observe(el); const w = el.clientWidth - 56; if (w > 0 && w !== this.state.gw) this.setState({ gw: w }); } }
-  componentDidUpdate() { this.observeGraph(); }
-  componentWillUnmount() { removeEventListener('keydown', this.onKey); clearInterval(this.timer); if (this.ro) this.ro.disconnect(); }
-  onKey = e => { if (e.target && e.target.tagName === 'INPUT') return; if (e.key === 'f') this.setState(s => ({ following: !s.following })); if (e.key === 'Escape') this.goUp(); };
+  componentDidUpdate() {
+    if (!this.state.ready) return;
+    this.setupCanvas();
+    const cur = this.current(); if (cur !== this.lastFocused) { this.lastFocused = cur; this.focusOn(cur, false); }
+  }
+  componentWillUnmount() { removeEventListener('keydown', this.onKey); clearInterval(this.timer); cancelAnimationFrame(this.raf); if (this.cro) this.cro.disconnect(); }
+  // ---- 3D tree on canvas ----
+  layout() {
+    const G = this.G, P = new Map(), pk = G.children.get('root') || [];
+    P.set('root', { x: 0, y: -260, z: 0 });
+    pk.forEach((id, i) => { const x = (i - (pk.length - 1) / 2) * 820; P.set(id, { x, y: 0, z: 0 });
+      const files = G.children.get(id) || [], nf = files.length;
+      files.forEach((f, j) => { const th = nf > 1 ? ((j - (nf - 1) / 2) / (nf - 1)) * 2.1 : 0; const fx = x + Math.sin(th) * 360, fz = 120 * (1 - Math.cos(th)) + 40; P.set(f, { x: fx, y: 320, z: fz });
+        const place = (parent, kids, y0, z0) => kids.forEach((k, m) => { const col = m % 2, row = Math.floor(m / 2); const p = { x: parent.x + (col - .5) * 175, y: y0 + row * 46, z: z0 + row * 60 }; P.set(k, p);
+          const sub = G.children.get(k) || []; if (sub.length) place(p, sub, p.y + 300, p.z + 40); });
+        place(P.get(f), G.children.get(f) || [], 660, fz + 70); }); });
+    this.P = P; this.rootNode = { id: 'root', name: 'codemap', kind: 'project', parent: null, child_count: pk.length, file: 'Cargo.toml', line_start: 1 };
+    this.cam = { yaw: -.28, pitch: .2, dist: 2600, tx: 0, ty: 0, tz: 0 }; this.goal = { ...this.cam };
+    this.fitAll();
+  }
+  nodeOf(id) { return id === 'root' ? this.rootNode : this.G.byId.get(id); }
+  // which containers are open: the selected path, the agent's path, and anything the user expanded
+  openSet(s = this.state) { const G = this.G, o = new Set(['root']); const cur = this.current(); for (const id of G.chain(cur)) o.add(id); for (const id of G.chain(s.active)) o.add(id); for (const k in s.expanded) if (s.expanded[k]) o.add(Number(k)); return o; }
+  visibleIds(s = this.state) { const o = this.openSet(s), out = ['root']; for (const [id] of this.P) { if (id === 'root') continue; const n = this.G.byId.get(id), pid = n.parent == null ? 'root' : n.parent; if (o.has(pid)) out.push(id); } return out; }
+  fitAll() { const ids = this.visibleIds(), pts = ids.map(id => this.P.get(id)), xs = pts.map(p => p.x), ys = pts.map(p => p.y), zs = pts.map(p => p.z);
+    const b = { cx: (Math.min(...xs) + Math.max(...xs)) / 2, cy: (Math.min(...ys) + Math.max(...ys)) / 2, cz: (Math.min(...zs) + Math.max(...zs)) / 2, w: Math.max(...xs) - Math.min(...xs) + 320, h: Math.max(...ys) - Math.min(...ys) + 160 };
+    const f = 1000, cw = this.cw || 800, ch = this.ch || 420; const dist = Math.max(b.w * f / (cw * .9), b.h * f / (ch * .78)) - f + 300; Object.assign(this.goal, { tx: b.cx, ty: b.cy, tz: b.cz, dist: Math.max(700, dist) }); }
+  setupCanvas() {
+    const c = document.querySelector('[data-cm-canvas]'); if (!c || c === this.canvas) return;
+    this.canvas = c; const el = c.parentElement;
+    const fit = () => { const r = el.getBoundingClientRect(), d = devicePixelRatio || 1; c.width = Math.max(1, r.width * d); c.height = Math.max(1, r.height * d); this.cw = r.width; this.ch = r.height; };
+    fit(); if (this.cro) this.cro.disconnect(); this.cro = new ResizeObserver(fit); this.cro.observe(el);
+    if (!this.userMoved && this.lastFocused == null) this.fitAll();
+    let drag = null;
+    c.onmousedown = e => { drag = { x: e.clientX, y: e.clientY, moved: false }; c.style.cursor = 'grabbing'; };
+    c.onmousemove = e => { const r = c.getBoundingClientRect(); this.mouse = { x: e.clientX - r.left, y: e.clientY - r.top };
+      if (!drag) { const m = this.mouse, hitR = (this.rects || []).find(q => m.x >= q.x && m.x <= q.x + q.w && m.y >= q.y && m.y <= q.y + q.h); this.hit = hitR ? hitR.id : null;
+        const hv = hitR ? { id: hitR.id, x: Math.min(this.cw - 274, hitR.x + hitR.w + 12), y: Math.min(this.ch - 120, hitR.y) } : null, hs = this.state.hover;
+        if ((hv && (!hs || hs.id !== hv.id)) || (!hv && hs)) this.setState({ hover: hv }); }
+      if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; this.goal.yaw += dx * .005; this.goal.pitch = Math.max(-.2, Math.min(1.2, this.goal.pitch + dy * .005)); this.cam.yaw = this.goal.yaw; this.cam.pitch = this.goal.pitch; drag.x = e.clientX; drag.y = e.clientY; this.userMoved = true; } };
+    c.onmouseup = e => { if (drag && !drag.moved && this.hit != null) { if (this.hit === 'root') { this.setState({ sel: null, following: false, expanded: {} }); this.userMoved = false; setTimeout(() => this.fitAll(), 0); } else this.select(this.hit, true); } drag = null; c.style.cursor = 'grab'; };
+    c.onmouseleave = () => { drag = null; this.mouse = null; if (this.state.hover) this.setState({ hover: null }); };
+    c.onwheel = e => { e.preventDefault(); this.goal.dist = Math.max(500, Math.min(5000, this.goal.dist * (1 + e.deltaY * .0012))); this.userMoved = true; };
+    if (!this.raf) this.frame();
+  }
+  focusOn(id, tight) { const p = this.P.get(id); if (!p) return; const n = this.G.byId.get(id), depth = this.G.chain(id).length;
+    if (!tight && n.child_count) { // frame the node together with what just opened beneath it
+      const kids = (this.G.children.get(id) || []).map(k => this.P.get(k)).concat([p]), xs = kids.map(q => q.x), ys = kids.map(q => q.y), zs = kids.map(q => q.z);
+      const w = Math.max(...xs) - Math.min(...xs) + 360, h = Math.max(...ys) - Math.min(...ys) + 200, f = 1000, dist = Math.max(w * f / ((this.cw || 800) * .9), h * f / ((this.ch || 420) * .75)) - f + 200;
+      return Object.assign(this.goal, { tx: (Math.min(...xs) + Math.max(...xs)) / 2, ty: (Math.min(...ys) + Math.max(...ys)) / 2, tz: (Math.min(...zs) + Math.max(...zs)) / 2, dist: Math.max(700, dist) }); }
+    Object.assign(this.goal, { tx: p.x, ty: p.y + (tight ? 20 : 140), tz: p.z + 60, dist: tight ? 800 : depth >= 3 ? 1100 : depth === 2 ? 1500 : 2200 }); }
+  project(p) { const c = this.cam, cy = Math.cos(c.yaw), sy = Math.sin(c.yaw), cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
+    let x = p.x - c.tx, y = p.y - c.ty, z = p.z - c.tz; const x1 = x * cy - z * sy, z1 = x * sy + z * cy; const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+    const f = 1000, s = f / (f + z2 + c.dist); return { x: this.cw / 2 + x1 * s, y: this.ch / 2 + y2 * s, s, depth: z2 }; }
+  frame = () => {
+    this.raf = requestAnimationFrame(this.frame);
+    const c = this.canvas, s = this.state; if (!c || !this.P || !s.ready) return;
+    const ctx = c.getContext('2d'), d = devicePixelRatio || 1, t = performance.now(); ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, this.cw, this.ch);
+    const cam = this.cam, g = this.goal, k = .08; for (const key of ['dist', 'tx', 'ty', 'tz']) cam[key] += (g[key] - cam[key]) * k;
+    if (!this.userMoved) { cam.yaw = g.yaw + Math.sin(t / 9000) * .09; cam.pitch = g.pitch + Math.sin(t / 13000) * .03; }
+    const G = this.G, cur = this.current(), chain = new Set(G.chain(cur)), act = s.active, actChain = new Set(G.chain(act)), trailW = new Map(s.trail.map(x => [x.node, x.weight]));
+    const col = { project: '#e9e9ed', route: '#6fd3a0', class: '#7fb0ff', module: '#9184d9', package: '#a3a7b8', function: '#c9ccd6' }, dimc = { project: '#5a5f75', route: '#2d6a4d', class: '#2a3d66', module: '#3a3466', package: '#3a3d4d', function: '#2a2e3d' };
+    const items = []; for (const id of this.visibleIds(s)) { const p = this.P.get(id), pr = this.project(p); items.push({ id, p, pr }); }
+    ctx.font = '12px Aileron, system-ui, sans-serif';
+    const dims = new Map(); const wOf = (n, sc) => { let w = dims.get(n.id); if (w == null) { w = Math.min(200, Math.max(96, ctx.measureText(n.name).width + 60)); dims.set(n.id, w); } return w * sc; };
+    // edges: parent -> child, sampled bezier in 3D
+    ctx.lineWidth = 1;
+    for (const it of items) { if (it.id === 'root') continue; const n = G.byId.get(it.id), pid = n.parent == null ? 'root' : n.parent, pp = this.P.get(pid); if (!pp) continue;
+      if (pid === 'root') { actChain.add('root'); chain.add('root'); }
+      const lit = actChain.has(it.id) && actChain.has(pid) || chain.has(it.id) && chain.has(pid); const pts = [];
+      for (let i = 0; i <= 10; i++) { const u = i / 10, my = (pp.y + it.p.y) / 2; const x = pp.x + (it.p.x - pp.x) * u, z = pp.z + (it.p.z - pp.z) * u, y = (1 - u) * (1 - u) * pp.y + 2 * (1 - u) * u * my + u * u * it.p.y; pts.push(this.project({ x, y, z })); }
+      const fog = Math.max(.15, Math.min(1, pts[10].s * 1.6));
+      ctx.strokeStyle = lit ? (actChain.has(it.id) ? '#8a6a33' : '#5a5f75') : dimc[n.kind]; ctx.globalAlpha = (lit ? 1 : .7) * fog; ctx.lineWidth = lit ? 1.4 : 1;
+      ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke();
+      if (actChain.has(it.id) && actChain.has(pid) && !document.hidden) { const u = ((t / 1400) + it.id * .37) % 1, i = Math.floor(u * 10), q0 = pts[i], q1 = pts[Math.min(10, i + 1)], f = u * 10 - i, qx = q0.x + (q1.x - q0.x) * f, qy = q0.y + (q1.y - q0.y) * f;
+        ctx.globalAlpha = fog; ctx.fillStyle = '#f2b45a'; ctx.beginPath(); ctx.arc(qx, qy, 2.2, 0, 7); ctx.fill(); } }
+    // nodes, far first
+    items.sort((a, b) => b.pr.depth - a.pr.depth); const m = this.mouse, rects = []; let hitNow = null;
+    for (const it of items) { const n = this.nodeOf(it.id), pr = it.pr; let sc = pr.s * (it.id === 'root' ? 1.35 : 1.15);
+      const isAct = it.id === act, isCur = it.id === cur, heat = isAct ? 1 : (trailW.get(it.id) || 0), onPath = chain.has(it.id) || actChain.has(it.id), fog = Math.max(.25, Math.min(1, pr.s * 1.7));
+      // level of detail: far-away leaves collapse to dots; crates/files/path nodes keep a readable minimum size
+      const leaf = n.kind === 'function' || n.kind === 'route' || n.kind === 'class'; const tiny = leaf && sc * 12 < 7 && !onPath && !heat;
+      if (!leaf || onPath || heat) sc = Math.max(sc, .62);
+      if (tiny) { if (pr.x < 0 || pr.x > this.cw || pr.y < 0 || pr.y > this.ch) continue; ctx.globalAlpha = .6 * fog; ctx.fillStyle = dimc[n.kind]; ctx.beginPath(); ctx.arc(pr.x, pr.y, 2, 0, 7); ctx.fill(); continue; }
+      const w = wOf(n, sc), h = 30 * sc, x = pr.x - w / 2, y = pr.y - h / 2;
+      if (x + w < 0 || x > this.cw || y + h < 0 || y > this.ch) continue;
+      rects.push({ id: it.id, x, y, w, h });
+      const over = m && m.x >= x && m.x <= x + w && m.y >= y && m.y <= y + h; if (over) hitNow = it.id;
+      ctx.globalAlpha = (onPath || isCur || over || heat ? 1 : .72) * fog; const r = 7 * sc;
+      if (isAct) { const pulse = ((t / 2400) % 1); ctx.strokeStyle = '#f2b45a'; ctx.globalAlpha = (1 - pulse) * .5 * fog; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 6 * pulse * sc - 3, y - 6 * pulse * sc - 3, w + 12 * pulse * sc + 6, h + 12 * pulse * sc + 6, r + 4); ctx.stroke(); ctx.globalAlpha = fog;
+        ctx.shadowColor = 'rgba(242,180,90,.5)'; ctx.shadowBlur = 24 * sc; } else if (heat) { ctx.shadowColor = `rgba(242,180,90,${(heat * .35).toFixed(2)})`; ctx.shadowBlur = 16 * sc; } else ctx.shadowBlur = 0;
+      ctx.fillStyle = isAct ? '#3a2d17' : isCur ? '#171a25' : '#0e1017'; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = isAct ? '#f2b45a' : isCur || over ? '#7a7f95' : dimc[n.kind]; ctx.lineWidth = isCur || isAct ? 1.4 : 1; ctx.stroke();
+      if (sc * 12 < 5.5) continue;
+      const gx = x + 11 * sc, gy = pr.y, gr = 3.5 * sc; ctx.lineWidth = 1; const kc = isAct ? '#f2b45a' : col[n.kind];
+      ctx.beginPath(); if (n.kind === 'class') { ctx.moveTo(gx, gy - gr); ctx.lineTo(gx + gr, gy); ctx.lineTo(gx, gy + gr); ctx.lineTo(gx - gr, gy); ctx.closePath(); ctx.strokeStyle = kc; ctx.stroke(); }
+      else if (n.kind === 'route') { ctx.arc(gx, gy, gr, 0, 7); ctx.strokeStyle = kc; ctx.stroke(); }
+      else if (n.kind === 'module') { ctx.fillStyle = kc; ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2); }
+      else if (n.kind === 'package') { ctx.strokeStyle = kc; ctx.strokeRect(gx - gr, gy - gr, gr * 2, gr * 2); }
+      else if (n.kind === 'project') { ctx.fillStyle = '#f2b45a'; ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2); }
+      else { ctx.fillStyle = '#7a7f95'; ctx.arc(gx, gy, gr * .7, 0, 7); ctx.fill(); }
+      ctx.fillStyle = isAct ? '#f2b45a' : isCur ? '#e9e9ed' : col[n.kind]; ctx.font = `${(12.5 * sc).toFixed(1)}px Aileron, system-ui, sans-serif`; ctx.textBaseline = 'middle';
+      let label = n.name, maxW = w - 46 * sc; while (ctx.measureText(label).width > maxW && label.length > 3) label = label.slice(0, -2) + '…'; ctx.fillText(label, x + 22 * sc, pr.y + .5);
+      if (n.child_count && sc > .45) { ctx.fillStyle = '#5a5f75'; ctx.font = `${(10.5 * sc).toFixed(1)}px Aileron, system-ui, sans-serif`; ctx.textAlign = 'right'; ctx.fillText(String(n.child_count), x + w - 10 * sc, pr.y + .5); ctx.textAlign = 'left'; }
+      if (heat) { ctx.fillStyle = '#f2b45a'; ctx.globalAlpha = heat * fog; ctx.beginPath(); ctx.arc(x + w - (n.child_count ? 26 : 12) * sc, pr.y, 2.4 * sc, 0, 7); ctx.fill(); } }
+    ctx.globalAlpha = 1; this.rects = rects.reverse(); this.hit = hitNow; this.canvas.style.cursor = hitNow ? 'pointer' : 'grab';
+  };
+  onKey = e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (e.key === 'f') return this.setState(s => ({ following: !s.following }));
+    if (e.key === 'Escape' || e.key === 'ArrowLeft') return this.goUp();
+    if (!this.state.ready) return;
+    const G = this.G, cur = this.current(), n = G.byId.get(cur);
+    if (e.key === 'ArrowRight') { const kids = G.children.get(cur) || []; const next = kids[0] ?? (G.calls.get(cur) || [])[0]; if (next != null) this.select(next, true); e.preventDefault(); }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { const sib = G.children.get(n.parent == null ? 'root' : n.parent) || []; const i = sib.indexOf(cur); const j = e.key === 'ArrowDown' ? Math.min(sib.length - 1, i + 1) : Math.max(0, i - 1); if (sib[j] != null) this.select(sib[j], true); e.preventDefault(); }
+  };
   simulate() {
     if (!(this.props.simulateAgent ?? false) || !this.state.ready) return;
     const seq = [230, 231, 221, 224, 206, 250, 252, 254];
@@ -290,7 +409,8 @@ class Component extends DCLogic {
       agentLine: s.following ? 'Following claude' : 'Detached', lastEvent: s.following ? 'last event 2s ago' : 'press f to re-attach', indexLine: '96 nodes · 70 edges · watching',
       followClass: s.following ? 'btn-primary' : 'btn-secondary', followLabel: s.following ? 'Following' : 'Follow', toggleFollow: () => this.setState({ following: !s.following }),
       query: s.query, onQuery: e => this.setState({ query: e.target.value }), goRoot: () => this.select(1, true), showTrail: this.props.showTrail ?? true,
-      rows: [], crumbs: [], gNodes: [], gEdges: [], gNotes: [], trailChips: [], routes: [], intents: [], depRows: [], svgW: 800, svgH: 240, selName: '', selKind: '', selTagClass: 'tag-neutral', bgField: this.bgField(), activeHalo: null };
+      rows: [], crumbs: [], hasHover: false, hv: {}, trailChips: [],
+      zoomOut: () => { this.userMoved = false; this.fitAll(); }, zoomIn: () => { this.userMoved = false; this.focusOn(this.current(), true); }, routes: [], intents: [], depRows: [], selName: '', selKind: '', selTagClass: 'tag-neutral', bgField: this.bgField(), outlineW: (this.props.showOutline ?? false) ? '224px' : '0px', outlineBorder: (this.props.showOutline ?? false) ? '1px solid var(--cm-line)' : '0', hasQuery: false, matches: [] };
     if (!s.ready) return base;
     const cur = this.current(), node = G.byId.get(cur), trailW = new Map(s.trail.map(t => [t.node, t.weight])), chain = G.chain(cur), activeChain = new Set(G.chain(s.active));
     const glyph = k => k === 'package' ? { glyphRadius: '2px', glyphBg: 'transparent', glyphBorder: 'var(--color-neutral-500)', glyphTransform: 'none' }
@@ -308,42 +428,40 @@ class Component extends DCLogic {
     base.rows = rows; base.outlineTitle = q ? 'matches' : 'outline'; base.outlineCount = q ? `${rows.length}` : `${D.nodes.length} nodes`;
     base.crumbs = chain.map((id, i) => { const n = G.byId.get(id); return { name: n.name, go: () => this.select(id, true), color: i === chain.length - 1 ? 'var(--color-text)' : 'var(--color-neutral-600)' }; });
     const isRoute = node.kind === 'route', isAct = node.id === s.active, tr = s.trail.find(t => t.node === node.id);
-    const kindColor = k => k === 'route' ? 'var(--cm-route)' : k === 'class' ? 'var(--cm-class)' : k === 'module' ? 'var(--cm-module)' : k === 'package' ? 'var(--color-neutral-400)' : 'var(--color-neutral-300)';
-    base.selName = node.name; base.selKind = node.kind; base.selKindColor = isAct ? 'var(--cm-agent)' : kindColor(node.kind); base.selTagClass = isAct ? 'tag-accent' : isRoute ? 'tag-outline' : 'tag-neutral';
+    base.selName = node.name; base.selKind = node.kind; base.selKindColor = isAct ? 'var(--cm-agent)' : (node.kind === 'route' ? 'var(--cm-route)' : node.kind === 'class' ? 'var(--cm-class)' : node.kind === 'module' ? 'var(--cm-module)' : 'var(--color-neutral-400)'); base.selTagClass = isAct ? 'tag-accent' : isRoute ? 'tag-outline' : 'tag-neutral';
     base.selHint = isAct ? 'the agent is here now' : tr ? `agent was here ${tr.ago} ago` : node.child_count ? `${node.child_count} inside` : '';
     base.selQualified = node.qualified_name; base.selLoc = node.file.split('/').slice(-2).join('/') + ':' + node.line_start; base.selPackage = G.byId.get(chain[0]).name;
-    // graph: routes | callers | this | callees (containers show their children as "calls")
-    const isContainer = node.child_count > 0 && node.kind !== 'class';
-    const callers = (G.rcalls.get(cur) || []).filter(id => G.byId.get(id).kind !== 'route');
-    const callees = isContainer ? (G.children.get(cur) || []) : (G.calls.get(cur) || []);
-    const gw = s.gw || 640, routes = G.routesReaching(cur), MAX = 7, H = 32, GAP = 12, svgW = gw;
-    const W = Math.min(176, Math.floor((gw - 3 * 28) / 4)), colX = [0, 1, 2, 3].map(i => Math.round(i * (gw - W) / 3));
-    const rowsN = Math.max(routes.length, callers.length, callees.length, 1), svgH = Math.max(120, Math.min(rowsN, MAX) * (H + GAP) - GAP + 8);
-    const place = (ids, col) => { const list = ids.slice(0, MAX), total = list.length * (H + GAP) - GAP, y0 = (svgH - total) / 2; return list.map((id, i) => ({ id, x: colX[col], y: y0 + i * (H + GAP) })); };
-    const pR = place(routes, 0), pC = place(callers, 1), pT = [{ id: cur, x: colX[2], y: (svgH - H) / 2 }], pE = place(callees, 3);
-    const parentName = n => n.parent != null ? G.byId.get(n.parent).name : '';
-    const mkNode = p => { const n = G.byId.get(p.id), act = p.id === s.active, isCur = p.id === cur, rt = n.kind === 'route', heat = trailW.get(p.id) || 0;
-      return { x: p.x, y: p.y, w: W, label: n.name,
-        fill: act ? 'var(--cm-agent-dim)' : isCur ? 'var(--cm-surface)' : 'var(--cm-bg)', stroke: act ? 'var(--cm-agent)' : isCur ? 'var(--color-neutral-500)' : rt ? 'var(--cm-route-dim)' : n.kind === 'class' ? 'var(--cm-class-dim)' : n.kind === 'module' ? 'var(--cm-module-dim)' : heat ? 'var(--cm-agent-mid)' : 'var(--cm-line)',
-        borderStyle: rt ? 'dashed' : 'solid', shadow: act ? '0 0 26px rgba(242,180,90,.35)' : heat ? `0 0 16px rgba(242,180,90,${(heat * .3).toFixed(2)})` : 'none',
-        color: act ? 'var(--cm-agent)' : rt ? 'var(--cm-route)' : n.kind === 'class' ? 'var(--cm-class)' : n.kind === 'module' ? 'var(--cm-module)' : isCur ? 'var(--color-text)' : 'var(--color-neutral-300)',
-        click: () => this.select(p.id, true), dbl: () => { if (n.child_count && n.kind !== 'class') this.setState(st => ({ expanded: { ...st.expanded, [p.id]: true } })); } }; };
-    base.gNodes = [...pR, ...pC, ...pT, ...pE].map(mkNode); base.svgW = svgW; base.svgH = svgH;
-    const actPos = [...pR, ...pC, ...pT, ...pE].find(p => p.id === s.active); base.activeHalo = actPos ? this.activeHalo(actPos.x, actPos.y, W) : null;
-    const t = pT[0], mid = t.y + H / 2, curve = (x1, y1, x2, y2) => `M${x1},${y1} C${x1 + 40},${y1} ${x2 - 40},${y2} ${x2},${y2}`;
-    const lit = id => id === s.active || trailW.has(id);
-    base.gEdges = [
-      ...pR.map(p => ({ d: curve(p.x + W, p.y + H / 2, t.x, mid), stroke: 'var(--cm-route-dim)', dash: '3 4', flow: 0 })),
-      ...pC.map(p => ({ d: curve(p.x + W, p.y + H / 2, t.x, mid), stroke: lit(p.id) ? 'var(--cm-agent-mid)' : 'var(--cm-line)', dash: '', flow: lit(p.id) || cur === s.active ? .9 : .35 })),
-      ...pE.map(p => ({ d: curve(t.x + W, mid, p.x, p.y + H / 2), stroke: lit(p.id) ? 'var(--cm-agent-mid)' : 'var(--cm-line)', dash: isContainer ? '2 3' : '', flow: isContainer ? 0 : lit(p.id) || cur === s.active ? .9 : .35 })),
-    ];
-    const notes = [], more = (arr, col) => { if (arr.length > MAX) notes.push({ x: colX[col] + 10, y: svgH - 16, text: `+${arr.length - MAX} more` }); };
-    more(routes, 0); more(callers, 1); more(callees, 3);
-    if (!routes.length) notes.push({ x: colX[0] + 10, y: mid - 8, text: 'no route found' });
-    if (!callers.length) notes.push({ x: colX[1] + 10, y: mid - 8, text: 'no callers indexed' });
-    if (!callees.length) notes.push({ x: colX[3] + 10, y: mid - 8, text: isContainer ? 'empty' : 'no resolved calls' });
-    if (isContainer) notes.push({ x: colX[3] + 10, y: -4, text: 'contents' });
-    base.gNotes = notes;
+    // glide columns: crates → files → symbols → members / neighbors. Each column keeps its siblings visible.
+    const routes = G.routesReaching(cur);
+    const shortFile = n => n.file.split('/').pop();
+    const kindColor = k => k === 'route' ? 'var(--cm-route)' : k === 'class' ? 'var(--cm-class)' : k === 'module' ? 'var(--cm-module)' : k === 'package' ? 'var(--color-neutral-400)' : 'var(--color-neutral-300)';
+    const mkGRow = (id, selId, opts = {}) => { const n = G.byId.get(id), sel = id === selId, act = id === s.active, heat = act ? 1 : (trailW.get(id) || 0), more = n.child_count > 0 || (G.calls.get(id) || []).length > 0;
+      return { id, name: n.name, meta: opts.showFile ? shortFile(n) : n.child_count ? String(n.child_count) : '', heat, chev: more ? '›' : '', chevColor: sel ? 'var(--color-neutral-400)' : 'var(--color-neutral-700)',
+        bg: sel ? 'var(--cm-surface)' : 'transparent', shadow: act ? 'inset 2px 0 0 var(--cm-agent)' : sel ? 'inset 2px 0 0 var(--color-neutral-600)' : 'none',
+        color: act ? 'var(--cm-agent)' : sel ? 'var(--color-text)' : opts.dim ? 'var(--color-neutral-500)' : kindColor(n.kind), click: () => this.select(id, true), ...glyph(n.kind) }; };
+    const cols = [];
+    const lineage = [null, ...chain];
+    for (let i = 0; i < chain.length; i++) {
+      const pid = lineage[i], kids = G.children.get(pid == null ? 'root' : pid) || [], p = pid == null ? null : G.byId.get(pid), selId = chain[i];
+      const inPath = activeChain.has(selId);
+      cols.push({ title: p ? p.name : 'crates', titleColor: p ? kindColor(p.kind) : 'var(--color-neutral-600)', count: String(kids.length), bg: 'transparent',
+        groups: [{ hasLabel: false, empty: false, rows: kids.map(id => mkGRow(id, selId)) }] });
+    }
+    // trailing column: what's inside, or who this talks to
+    const kids = G.children.get(cur) || [], kidsHere = kids.length > 0;
+    if (kids.length) cols.push({ title: node.name, titleColor: kindColor(node.kind), count: String(kids.length), bg: 'transparent', groups: [{ hasLabel: false, empty: false, rows: kids.map(id => mkGRow(id, null)) }] });
+    else {
+      const callers = (G.rcalls.get(cur) || []), callees = (G.calls.get(cur) || []);
+      cols.push({ title: node.name, titleColor: kindColor(node.kind), count: `${callers.length + callees.length + routes.length}`, bg: 'rgba(23,26,37,.45)', groups: [
+        { hasLabel: true, label: 'reached from', color: 'var(--cm-route)', empty: !routes.length, emptyText: 'no route found — unknown, not unreachable', rows: routes.map(id => mkGRow(id, null, { showFile: true })) },
+        { hasLabel: true, label: 'called by', color: 'var(--color-neutral-500)', empty: !callers.length, emptyText: 'no callers indexed', rows: callers.map(id => mkGRow(id, null, { showFile: true })) },
+        { hasLabel: true, label: 'calls', color: 'var(--color-neutral-500)', empty: !callees.length, emptyText: node.unresolved_calls ? `${node.unresolved_calls} call sites unresolved` : 'calls nothing codemap can see', rows: callees.map(id => mkGRow(id, null, { showFile: true })) },
+      ] });
+    }
+    if (s.hover && G.byId.get(s.hover.id)) { const hn = G.byId.get(s.hover.id), hs = D.summaries[hn.id] || {}; base.hasHover = true;
+      base.hv = { x: Math.max(8, s.hover.x), y: Math.max(8, s.hover.y), name: hn.name, kind: hn.kind, kindColor: kindColor(hn.kind), purpose: hs.purpose || (hn.child_count ? `${hn.child_count} inside` : hn.kind === 'route' ? `HTTP entry point in ${shortFile(hn)}` : `A ${hn.kind} in ${shortFile(hn)}`),
+        callers: `${(G.rcalls.get(hn.id) || []).length} callers`, calls: `${(G.calls.get(hn.id) || []).length} calls`, file: shortFile(hn) + ':' + hn.line_start }; }
+    if (q) { base.hasQuery = true; base.matches = D.nodes.filter(n => n.qualified_name.toLowerCase().includes(q) || n.file.toLowerCase().includes(q)).slice(0, 12).map(n => ({ name: n.name, meta: n.file.split('/').slice(-2).join('/'), color: kindColor(n.kind), click: () => { this.setState({ query: '' }); this.select(n.id, true); }, ...glyph(n.kind) })); }
     base.trailChips = s.trail.map(tt => { const n = G.byId.get(tt.node); return { name: n.name, ago: tt.ago === 'now' ? 'now' : `${tt.ago} ago`, opacity: .35 + tt.weight * .65, bg: tt.node === cur ? 'var(--cm-surface)' : 'transparent', click: () => this.select(tt.node, true) }; });
     base.routes = routes.map(id => { const n = G.byId.get(id), [method, path] = n.name.split(' '); return { method, path, file: n.file.split('/').pop() + ':' + n.line_start, click: () => this.select(id, true) }; });
     base.hasRoutes = routes.length > 0; base.noRoutes = routes.length === 0;
@@ -351,6 +469,11 @@ class Component extends DCLogic {
     base.nCallers = (G.rcalls.get(cur) || []).length; base.nCallees = res; base.nUnresolved = u; base.unresolvedColor = u ? 'var(--cm-warn)' : 'var(--color-neutral-600)'; base.resolvedPct = pct;
     base.knownNote = u ? `${pct}% of call sites in this node resolved. The rest go through variables whose type isn't inferred — a caller or route may exist that codemap can't see.` : 'Every call site in this node resolved. Containment and routes are exact; call edges are heuristic.';
     base.source = D.sourceFor(node);
+    // dependencies: reference list for the file, never nodes
+    const modId = chain.find(id => G.byId.get(id).kind === 'module');
+    const modIds = node.kind === 'package' ? (G.children.get(node.id) || []) : modId != null ? [modId] : [];
+    const seen = new Map(); for (const m of modIds) for (const d of (D.deps[m] || [])) if (!seen.has(d.name)) seen.set(d.name, d);
+    const used = new Set(D.symDeps[node.id] || []), isSym = node.kind === 'function' || node.kind === 'class' || node.kind === 'route';
     // what this is + how you get here
     const nm = id => G.byId.get(id).name, list = (ids, n = 3) => ids.slice(0, n).map(nm).join(', ') + (ids.length > n ? ` and ${ids.length - n} more` : '');
     const sm = D.summaries[node.id] || {};
@@ -367,11 +490,6 @@ class Component extends DCLogic {
       return { name: n.name, arrow: last ? '' : '→', click: () => this.select(id, true), border: last ? 'var(--cm-agent-mid)' : rt ? 'var(--cm-route-dim)' : 'var(--cm-line)', bg: last ? 'var(--cm-agent-dim)' : 'transparent', color: last ? 'var(--cm-agent)' : rt ? 'var(--cm-route)' : 'var(--color-neutral-300)' }; });
     const top = G.byId.get(path[0]);
     base.pathNote = path.length === 1 ? 'nothing indexed calls this' : top.kind === 'route' ? 'from a route' : top.name === 'main' ? 'from the binary\'s entry point' : `${path.length - 1} hop${path.length > 2 ? 's' : ''} up, then unknown`;
-    // dependencies: reference list for the file, never nodes
-    const modId = chain.find(id => G.byId.get(id).kind === 'module');
-    const modIds = node.kind === 'package' ? (G.children.get(node.id) || []) : modId != null ? [modId] : [];
-    const seen = new Map(); for (const m of modIds) for (const d of (D.deps[m] || [])) if (!seen.has(d.name)) seen.set(d.name, d);
-    const used = new Set(D.symDeps[node.id] || []), isSym = node.kind === 'function' || node.kind === 'class' || node.kind === 'route';
     base.depFile = node.kind === 'package' ? node.name : modId != null ? G.byId.get(modId).name : '';
     base.depRows = [...seen.values()].sort((a, b) => (used.has(b.name) - used.has(a.name)) || a.name.localeCompare(b.name)).map(d => { const hot = used.has(d.name), open = s.depOpen === d.name;
       return { name: d.name, why: d.why, open, tag: hot ? `used by ${node.name}` : 'crate', caret: open ? 'why ↑' : 'why ↓', dot: hot ? 'var(--cm-dep)' : 'var(--color-neutral-800)', color: hot ? 'var(--cm-dep)' : isSym ? 'var(--color-neutral-500)' : 'var(--color-neutral-300)', click: () => this.setState({ depOpen: open ? null : d.name }) }; });
