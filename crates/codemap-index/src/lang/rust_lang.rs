@@ -1,6 +1,6 @@
 use crate::extractor::{FileFacts, LanguageExtractor, RawCall, RawRoute, RawSymbol};
 use codemap_graph::NodeKind;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tree_sitter::{Node as TsNode, Parser};
 
 pub struct RustExtractor;
@@ -40,7 +40,15 @@ impl LanguageExtractor for RustExtractor {
         let mut imports = HashSet::new();
         collect_imports(tree.root_node(), src, &mut imports);
         f.imports = imports.iter().cloned().collect();
-        walk(tree.root_node(), src, None, None, &imports, &mut f);
+        walk(
+            tree.root_node(),
+            src,
+            None,
+            None,
+            &imports,
+            &HashMap::new(),
+            &mut f,
+        );
         f // tree dropped here — never retained
     }
 }
@@ -63,12 +71,45 @@ fn collect_idents(n: TsNode, src: &str, out: &mut HashSet<String>) {
     }
 }
 
+/// `let x = Type::new(...)` inside one function body -> {x: Type}. Parity with
+/// the Python/TypeScript/Go local-binding heuristics.
+fn local_bindings(scope: TsNode, src: &str) -> HashMap<String, String> {
+    fn rec(n: TsNode, src: &str, out: &mut HashMap<String, String>) {
+        for ch in named_children(n) {
+            if ch.kind() == "let_declaration" {
+                if let (Some(pat), Some(val)) = (
+                    ch.child_by_field_name("pattern"),
+                    ch.child_by_field_name("value"),
+                ) {
+                    if pat.kind() == "identifier" && val.kind() == "call_expression" {
+                        if let Some(f) = val.child_by_field_name("function") {
+                            if f.kind() == "scoped_identifier" {
+                                if let Some(ty) = named_children(f).first() {
+                                    out.insert(
+                                        text(pat, src).to_string(),
+                                        text(*ty, src).to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            rec(ch, src, out);
+        }
+    }
+    let mut out = HashMap::new();
+    rec(scope, src, &mut out);
+    out
+}
+
 fn walk(
     n: TsNode,
     src: &str,
     class: Option<&str>,
     func: Option<&str>,
     imports: &HashSet<String>,
+    bindings: &HashMap<String, String>,
     f: &mut FileFacts,
 ) {
     for ch in named_children(n) {
@@ -89,7 +130,7 @@ fn walk(
                 let owner = ch
                     .child_by_field_name("type")
                     .map(|t| text(t, src).to_string());
-                walk(ch, src, owner.as_deref(), func, imports, f);
+                walk(ch, src, owner.as_deref(), func, imports, bindings, f);
                 continue;
             }
             "function_item" => {
@@ -102,7 +143,8 @@ fn walk(
                         line_end: ch.end_position().row as u32 + 1,
                         kind: NodeKind::Function,
                     });
-                    walk(ch, src, class, Some(&nm), imports, f);
+                    let inner = local_bindings(ch, src);
+                    walk(ch, src, class, Some(&nm), imports, &inner, f);
                     continue;
                 }
             }
@@ -110,11 +152,11 @@ fn walk(
                 if let Some(r) = route_from_call(ch, src) {
                     f.routes.push(r);
                 }
-                record_call(ch, src, class, func, imports, f);
+                record_call(ch, src, class, func, imports, bindings, f);
             }
             _ => {}
         }
-        walk(ch, src, class, func, imports, f);
+        walk(ch, src, class, func, imports, bindings, f);
     }
 }
 
@@ -124,6 +166,7 @@ fn record_call(
     class: Option<&str>,
     func: Option<&str>,
     imports: &HashSet<String>,
+    bindings: &HashMap<String, String>,
     f: &mut FileFacts,
 ) {
     let Some(fun) = call.child_by_field_name("function") else {
@@ -151,7 +194,15 @@ fn record_call(
                     }
                     true
                 }
-                Some(r) if r.kind() == "identifier" => imports.contains(text(r, src)),
+                Some(r) if r.kind() == "identifier" => {
+                    let t = text(r, src);
+                    if let Some(ty) = bindings.get(t) {
+                        callee = format!("{ty}.{attr}");
+                        true
+                    } else {
+                        imports.contains(t)
+                    }
+                }
                 _ => false,
             };
             f.calls.push(RawCall {
