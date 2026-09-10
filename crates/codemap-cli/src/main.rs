@@ -65,13 +65,29 @@ fn main() -> ExitCode {
         }
         Cmd::Reach { path, symbol } => {
             let g = index_repo(&path);
-            let Some(n) = g
+            let matches: Vec<_> = g
                 .nodes()
                 .iter()
-                .find(|n| n.name == symbol || n.qualified_name == symbol)
-            else {
-                eprintln!("symbol not found: {symbol}");
-                return ExitCode::FAILURE;
+                .filter(|n| n.name == symbol || n.qualified_name == symbol)
+                .collect();
+            let n = match matches.len() {
+                0 => {
+                    eprintln!("symbol not found: {symbol}");
+                    return ExitCode::FAILURE;
+                }
+                1 => matches[0],
+                _ => {
+                    // Never silently pick one. Show the candidates so the caller
+                    // can re-run with a qualified name.
+                    eprintln!("{} symbols named {symbol}; qualify one of:", matches.len());
+                    for m in matches.iter().take(20) {
+                        eprintln!("  {}  ({}:{})", m.qualified_name, m.file, m.line_start);
+                    }
+                    if matches.len() > 20 {
+                        eprintln!("  ... and {} more", matches.len() - 20);
+                    }
+                    return ExitCode::FAILURE;
+                }
             };
             let routes = g.routes_reaching(n.id);
             if routes.is_empty() {
