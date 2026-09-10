@@ -190,6 +190,13 @@ pub fn deliver_prompt(prompt: &str) {
     copy_to_clipboard(prompt);
 }
 
+const AGENT_NAMES: [&str; 3] = ["claude", "codex", "gemini"];
+
+/// Finds the tmux pane running a coding agent.
+///
+/// `pane_current_command` is unreliable: Claude Code reports its version string
+/// (e.g. "2.1.263") rather than "claude", so matching on it misses real panes.
+/// Inspecting the processes attached to each pane's tty is what actually works.
 pub fn find_agent_pane() -> Option<String> {
     if let Ok(p) = std::env::var("CODEMAP_AGENT_PANE") {
         return Some(p);
@@ -199,18 +206,41 @@ pub fn find_agent_pane() -> Option<String> {
             "list-panes",
             "-a",
             "-F",
-            "#{pane_id} #{pane_current_command}",
+            "#{pane_id} #{pane_tty} #{pane_current_command}",
         ])
         .output()
         .ok()?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut fallback = None;
     for line in text.lines() {
-        let (id, cmd) = line.split_once(' ')?;
-        if matches!(cmd, "claude" | "codex" | "gemini" | "node") {
+        let mut parts = line.split(' ');
+        let (Some(id), Some(tty)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let cmd = parts.next().unwrap_or("");
+        if AGENT_NAMES.contains(&cmd) {
             return Some(id.to_string());
         }
+        if fallback.is_none() && pane_runs_agent(tty) {
+            fallback = Some(id.to_string());
+        }
     }
-    None
+    fallback
+}
+
+fn pane_runs_agent(tty: &str) -> bool {
+    let short = tty.strip_prefix("/dev/").unwrap_or(tty);
+    let Ok(out) = std::process::Command::new("ps")
+        .args(["-t", short, "-o", "command="])
+        .output()
+    else {
+        return false;
+    };
+    String::from_utf8_lossy(&out.stdout).lines().any(|l| {
+        let first = l.split_whitespace().next().unwrap_or("");
+        let base = first.rsplit('/').next().unwrap_or(first);
+        AGENT_NAMES.contains(&base)
+    })
 }
 
 pub fn copy_to_clipboard(text: &str) {

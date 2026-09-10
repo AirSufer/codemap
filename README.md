@@ -44,12 +44,42 @@ codemap reach <path> <symbol>     # which routes reach this symbol
 
 ### tmux
 
+Run the daemon in its own detached window so it costs you no screen space, then
+split a short ticker pane wherever you want it:
+
 ```sh
-tmux split-window -v -l 10 'codemap ticker /path/to/repo'
+REPO=~/code/my-project
+tmux new-window -d -n codemapd "codemap start $REPO"
+tmux split-window -v -l 9 "codemap ticker $REPO"
+```
+
+Or as a shell function:
+
+```sh
+codemap-here() {
+  local r="${1:-$PWD}"
+  tmux new-window -d -n codemapd "codemap start $r"
+  sleep 2
+  tmux split-window -v -l 9 "codemap ticker $r"
+}
 ```
 
 `f` toggles follow, `q` quits. The ticker is optional — the browser UI is the
 primary surface, since plenty of people don't use tmux.
+
+### Sending a prompt back to your agent
+
+Clicking *send to agent* in the browser types a prompt into your agent's tmux
+pane **without pressing Enter** — you review and submit it yourself.
+
+The pane is auto-detected. Note that `pane_current_command` is unreliable
+(Claude Code reports its version string, e.g. `2.1.263`, not `claude`), so
+detection inspects the processes on each pane's tty. If it picks the wrong pane,
+pin it:
+
+```sh
+export CODEMAP_AGENT_PANE=%19   # see: tmux list-panes -a -F '#{pane_id} #{pane_current_command}'
+```
 
 ## What it is honest about
 
