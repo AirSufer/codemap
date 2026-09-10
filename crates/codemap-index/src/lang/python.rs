@@ -1,6 +1,6 @@
 use crate::extractor::{FileFacts, LanguageExtractor, RawCall, RawRoute, RawSymbol};
 use codemap_graph::NodeKind;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tree_sitter::{Node as TsNode, Parser};
 
 pub struct PythonExtractor;
@@ -30,7 +30,15 @@ impl LanguageExtractor for PythonExtractor {
         let mut imports: HashSet<String> = HashSet::new();
         collect_imports(tree.root_node(), src, &mut imports);
         f.imports = imports.iter().cloned().collect();
-        walk(tree.root_node(), src, None, None, &imports, &mut f);
+        walk(
+            tree.root_node(),
+            src,
+            None,
+            None,
+            &imports,
+            &HashMap::new(),
+            &mut f,
+        );
         f // tree dropped here — never retained
     }
 }
@@ -56,12 +64,46 @@ fn collect_imports(n: TsNode, src: &str, out: &mut HashSet<String>) {
     }
 }
 
+/// Maps local variable name -> class name for `x = ClassName()` assignments
+/// inside one function body. Deliberately shallow: no reassignment tracking,
+/// no branches, no attribute targets. Recovers part of the `<local var>.x()`
+/// gap, which the spike measured at 17,136 of 23,848 unresolvable Python calls.
+fn local_bindings(func: TsNode, src: &str) -> HashMap<String, String> {
+    fn rec(n: TsNode, src: &str, out: &mut HashMap<String, String>) {
+        let mut c = n.walk();
+        for ch in n.children(&mut c) {
+            if ch.kind() == "assignment" {
+                if let (Some(l), Some(r)) = (
+                    ch.child_by_field_name("left"),
+                    ch.child_by_field_name("right"),
+                ) {
+                    if l.kind() == "identifier" && r.kind() == "call" {
+                        if let Some(f) = r.child_by_field_name("function") {
+                            if f.kind() == "identifier" {
+                                let cls = text(f, src);
+                                if cls.chars().next().is_some_and(|c| c.is_uppercase()) {
+                                    out.insert(text(l, src).to_string(), cls.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            rec(ch, src, out);
+        }
+    }
+    let mut out = HashMap::new();
+    rec(func, src, &mut out);
+    out
+}
+
 fn walk(
     n: TsNode,
     src: &str,
     class: Option<&str>,
     func: Option<&str>,
     imports: &HashSet<String>,
+    bindings: &HashMap<String, String>,
     f: &mut FileFacts,
 ) {
     let mut c = n.walk();
@@ -76,7 +118,7 @@ fn walk(
                         line_end: ch.end_position().row as u32 + 1,
                         kind: NodeKind::Class,
                     });
-                    walk(ch, src, Some(&name), None, imports, f);
+                    walk(ch, src, Some(&name), None, imports, &HashMap::new(), f);
                     continue;
                 }
             }
@@ -89,7 +131,8 @@ fn walk(
                         line_end: ch.end_position().row as u32 + 1,
                         kind: NodeKind::Function,
                     });
-                    walk(ch, src, class, Some(&name), imports, f);
+                    let inner = local_bindings(ch, src);
+                    walk(ch, src, class, Some(&name), imports, &inner, f);
                     continue;
                 }
             }
@@ -97,7 +140,7 @@ fn walk(
                 if let Some(r) = route_from_decorated(ch, src) {
                     f.routes.push(r);
                 }
-                walk(ch, src, class, func, imports, f);
+                walk(ch, src, class, func, imports, bindings, f);
                 continue;
             }
             "call" => {
@@ -115,16 +158,22 @@ fn walk(
                                 .map(|a| text(a, src).to_string())
                                 .unwrap_or_default();
                             let recv = fun.child_by_field_name("object");
+                            let mut callee = attr.clone();
                             let resolvable = match recv {
                                 Some(r) if r.kind() == "identifier" => {
                                     let t = text(r, src);
-                                    t == "self" || t == "cls" || imports.contains(t)
+                                    if let Some(cls) = bindings.get(t) {
+                                        callee = format!("{cls}.{attr}");
+                                        true
+                                    } else {
+                                        t == "self" || t == "cls" || imports.contains(t)
+                                    }
                                 }
                                 _ => false,
                             };
                             f.calls.push(RawCall {
                                 from_symbol: owner,
-                                callee: attr,
+                                callee,
                                 resolvable,
                             });
                         }
@@ -134,7 +183,7 @@ fn walk(
             }
             _ => {}
         }
-        walk(ch, src, class, func, imports, f);
+        walk(ch, src, class, func, imports, bindings, f);
     }
 }
 
