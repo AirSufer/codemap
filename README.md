@@ -10,8 +10,12 @@ what it touches. `codemap` answers that continuously, without you asking.
   read and edit; the graph highlights the exact function being touched and fades a
   trail of what came before.
 - **A 3D tree you can fly through.** Project → packages → files → symbols, laid
-  out in depth and drawn on canvas. Drag to orbit, wheel to zoom, click to
-  select, `/` to jump to any symbol. Level toggles decide how deep it draws.
+  out in depth and drawn on canvas. Every parent-child edge is the same length,
+  so depth reads as depth. Drag to orbit, shift-drag or arrow keys to pan within
+  the tree's bounds, wheel to zoom, click to select, `/` to jump to any symbol.
+- **Call edges as dashed overlays.** Solid lines are containment; dashed teal
+  lines are calls, lit when they touch the selected symbol. A symbol's callers
+  and callees stay visible even with their level toggled off.
 - **A panel that explains, not just lists.** What a symbol is (its doc comment
   and signature), how you get to it (the call path up to a route or entry
   point), and how much of that codemap actually knows.
