@@ -155,10 +155,11 @@ across the set.
 for files in the currently-focused container. Persistent state is nodes and edges only.
 Retaining every tree would cost hundreds of MB and negate the reason for choosing Rust.
 
-**Lazy, level-by-level indexing.** At startup, walk the tree and extract module-level
-symbols only — cheap, shallow. Full call-graph extraction for a container happens when the
-developer enters it or when the agent touches it. Cold start is near-instant regardless of
-repo size; memory stays proportional to where you have actually been.
+**Eager full indexing, incremental updates.** Measured 2026-09-10 on `core-service`
+(787 Python files, 11.8 MB): a complete parse-and-extract pass costs **805ms** and **15.9 MB**
+RSS with trees dropped. Lazy level-by-level extraction was specced to avoid that cost and is
+therefore **cut** — it is a whole subsystem bought for under a second. Index everything at
+startup; re-parse single files on change.
 
 **Languages (v1):** Python, TypeScript/JavaScript, Go, Rust. Each implements:
 
@@ -186,7 +187,23 @@ outer shell of the layout because they are where control enters the system.
   explicit imports.
 - Dynamic patterns — `getattr`, monkey-patching, duck typing, reflection — are not handled.
 
-Accuracy targets to be validated by the §17 spike, not assumed.
+**Measured accuracy (Python, `core-service`, 2026-09-10).** Of 78,536 call sites:
+
+| Resolvable without type inference | 54,688 | **69.6%** |
+|---|---|---|
+| bare `name()` | 41,405 | |
+| `self.x()` / `cls.x()` | 4,560 | |
+| `<imported>.x()` | 8,723 | |
+| **Needs type inference** | **23,848** | **30.4%** |
+| `<local var>.x()` | 17,136 | |
+| `a.b.c()` chained | 4,847 | |
+| `f().x()` | 1,659 | |
+| `a[i].x()` | 206 | |
+
+This supersedes the 80–90% estimate made during brainstorming. `<local var>.x()` is the
+dominant gap; a cheap intra-function assignment scan (`x = SomeClass()` then `x.method()`)
+should recover part of it and is worth attempting before accepting 69.6% as the ceiling.
+The UI must not present `calls` edges as complete — see §19.
 
 ## 8. Resolver
 
@@ -305,24 +322,23 @@ entire codebase.
 
 ## 17. Performance budgets
 
-Targets to validate, **not measurements**:
+Measured 2026-09-10 (marked M); the rest remain targets (T):
 
-- Hook overhead: < 5ms wall time (socket write and exit; the agent blocks on this).
-- Cold start on a ~700-file repo: < 1s to first render (shallow index only).
-- Container entry (full extraction): < 200ms.
-- Steady-state RSS: < 50MB on a ~700-file repo.
-- Frame rate: 60fps at up to ~200 visible nodes.
+- **M** Full index, 787 Python files / 11.8 MB: **805ms**, 978 files/s, 0 parse failures.
+- **M** Steady-state RSS with trees dropped: **15.9 MB**. With trees retained: 266 MB (16.7x).
+- **M** tree-sitter 0.27 loads Python 0.25, TypeScript 0.23 (ABI 14), Go 0.25, Rust 0.24 — no ABI mismatch.
+- **T** Hook overhead: < 5ms wall time (socket write and exit; the agent blocks on this).
+- **T** Incremental re-parse of one changed file: < 10ms.
+- **T** Frame rate: 60fps at up to ~200 visible nodes.
 
-**First task in the implementation plan is a throwaway spike** measuring tree-sitter over
-`core-service`'s 669 Python files: cold index time, node/edge counts, RSS with and without
-tree retention, and a manual accuracy sample of `calls` edges. If cold index or accuracy
-misses badly, the indexing strategy changes before anything is built on top of it.
+**The spike is complete** (2026-09-10, results above). It cut lazy indexing from the design
+and corrected the call-accuracy claim downward. Spike code was throwaway and is not retained.
 
 ## 18. Risks
 
 | Risk | Mitigation |
 |---|---|
-| `calls` accuracy too low to be useful | Spike measures it first; if poor, fall back to import-level edges plus explicit call sites only, and say so in the UI |
+| `calls` accuracy measured at 69.6% (Python) | Known, not hypothetical. Attempt the local-assignment heuristic; regardless, the UI must mark `calls` edges as best-effort and never imply completeness |
 | Nested-scale camera is disorienting | The novel part with no reference implementation; budget a second pass, keep sibling backdrop and breadcrumbs |
 | Agent hook APIs shift | Adapters are a mapping table; pin verified schemas in tests and re-verify per release |
 | Rapid tool calls thrash the camera | Debounce focus changes; trail absorbs bursts |
