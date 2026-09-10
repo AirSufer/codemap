@@ -16,9 +16,11 @@ what it touches. `codemap` answers that continuously, without you asking.
 - **Call edges as dashed overlays.** Solid lines are containment; dashed teal
   lines are calls, lit when they touch the selected symbol. A symbol's callers
   and callees stay visible even with their level toggled off.
-- **A panel that explains, not just lists.** What a symbol is (its doc comment
-  and signature), how you get to it (the call path up to a route or entry
-  point), and how much of that codemap actually knows.
+- **A panel that teaches, not just lists.** Design docs in reverse: a headline,
+  then a git-tree of how the thing connects — what reaches it, what it holds,
+  what it leans on — with the unresolved call sites drawn as a branch rather
+  than hidden in a footnote. The tree is generated once in Rust and rendered
+  verbatim by both the browser and the terminal, so the two cannot drift.
 - **Reachability.** Select any function and see which API routes can reach it.
 - **Works with any agent.** A filesystem watcher covers everything, including you
   editing by hand. Hooks are enrichment, not a requirement.
@@ -39,6 +41,10 @@ already running.
 codemap -ui .                # browser map, opens your browser
 codemap -term <project_dir>  # full-screen terminal map, vim keys
 ```
+
+Both take a path; `.` is only the default. Either one walks up to the git root,
+so pointing at `src/` still maps the project, and both resolve to the same
+daemon however you spell the path.
 
 The rest:
 

@@ -1,3 +1,4 @@
+pub mod describe;
 pub mod extractor;
 pub mod indexer;
 pub mod lang;

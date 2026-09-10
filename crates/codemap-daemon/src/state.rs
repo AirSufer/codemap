@@ -15,9 +15,11 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMsg {
-    Graph(GraphPayload),
-    Focus(FocusSnapshot),
-    Detail(DetailPayload),
+    // Boxed: the detail payload now carries source and a rendered tree, which
+    // would otherwise make every message as large as the largest variant.
+    Graph(Box<GraphPayload>),
+    Focus(Box<FocusSnapshot>),
+    Detail(Box<DetailPayload>),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,6 +73,11 @@ pub struct DetailPayload {
     pub doc: String,
     /// For containers, what they hold — packages have no source to quote.
     pub composition: String,
+    /// One sentence: what this is and what role it plays.
+    pub headline: String,
+    /// Git-tree view of how this node connects. Generated once, rendered
+    /// verbatim by both the browser panel and the terminal preview.
+    pub tree: String,
 }
 
 pub struct Inner {
@@ -105,15 +112,15 @@ impl AppState {
 
     pub fn graph_payload(&self) -> ServerMsg {
         let g = self.inner.lock().unwrap();
-        ServerMsg::Graph(build_graph_payload(&g.graph, &g.root))
+        ServerMsg::Graph(Box::new(build_graph_payload(&g.graph, &g.root)))
     }
 
     pub fn focus_payload(&self) -> ServerMsg {
         let g = self.inner.lock().unwrap();
-        ServerMsg::Focus(g.focus.snapshot(&g.graph, Instant::now()))
+        ServerMsg::Focus(Box::new(g.focus.snapshot(&g.graph, Instant::now())))
     }
 
-    pub fn detail(&self, id: u32) -> Option<ServerMsg> {
+    pub fn detail(&self, id: u32, width: usize) -> Option<ServerMsg> {
         let g = self.inner.lock().unwrap();
         let nid = NodeId(id);
         if id as usize >= g.graph.len() {
@@ -121,13 +128,23 @@ impl AppState {
         }
         let n = g.graph.node(nid);
         let source = read_span(&n.file, n.line_start, n.line_end);
-        let (signature, doc) = signature_and_doc(&n.file, n.line_start, &source);
-        let composition = if matches!(n.kind, NodeKind::Package | NodeKind::Module) {
-            describe_children(&g.graph, nid)
+        use codemap_index::describe;
+        let is_container = matches!(n.kind, NodeKind::Package | NodeKind::Module);
+        let doc = describe::doc(&n.file, n.line_start, &source);
+        // A container has no declaration to quote; its leading comments are
+        // documentation, not a signature.
+        let signature = if is_container {
+            String::new()
+        } else {
+            describe::signature(&source)
+        };
+        let composition = if is_container {
+            describe::composition(&g.graph, nid)
         } else {
             String::new()
         };
-        Some(ServerMsg::Detail(DetailPayload {
+        let headline = describe::headline(&g.graph, nid, &doc);
+        Some(ServerMsg::Detail(Box::new(DetailPayload {
             id,
             qualified_name: n.qualified_name.clone(),
             file: n.file.clone(),
@@ -143,7 +160,9 @@ impl AppState {
             signature,
             doc,
             composition,
-        }))
+            headline,
+            tree: describe::tree(&g.graph, nid, width),
+        })))
     }
 
     /// Ingest one activity event: resolve it to a node and update focus.
@@ -194,124 +213,6 @@ impl AppState {
             g.focus.detach()
         }
     }
-}
-
-/// Pulls the declaration line(s) and any docstring or leading comment block.
-/// Read from the file rather than the index so it costs nothing until a node
-/// is actually selected.
-fn signature_and_doc(file: &str, line_start: u32, source: &str) -> (String, String) {
-    let sig: String = source
-        .lines()
-        .take(6)
-        .scan(false, |done, l| {
-            if *done {
-                return None;
-            }
-            if l.contains('{') || l.trim_end().ends_with(':') {
-                *done = true;
-            }
-            Some(l.trim().to_string())
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-        .trim_end_matches('{')
-        .trim()
-        .to_string();
-
-    // Python: a string literal on the line after the declaration.
-    let mut doc = String::new();
-    let body: Vec<&str> = source.lines().skip(1).collect();
-    if let Some(first) = body.iter().find(|l| !l.trim().is_empty()) {
-        let t = first.trim();
-        for q in ["\"\"\"", "'''"] {
-            if let Some(rest) = t.strip_prefix(q) {
-                if let Some(end) = rest.find(q) {
-                    doc = rest[..end].trim().to_string();
-                } else {
-                    let mut acc = vec![rest.to_string()];
-                    for l in body.iter().skip(1) {
-                        if let Some(cut) = l.find(q) {
-                            acc.push(l[..cut].to_string());
-                            break;
-                        }
-                        acc.push(l.trim().to_string());
-                    }
-                    doc = acc.join(" ").trim().to_string();
-                }
-                break;
-            }
-        }
-    }
-    // Rust / TS / Go: comment lines immediately above the declaration.
-    if doc.is_empty() && line_start > 1 {
-        if let Ok(text) = std::fs::read_to_string(file) {
-            let lines: Vec<&str> = text.lines().collect();
-            let mut acc = Vec::new();
-            let mut i = line_start as usize - 1;
-            while i > 0 {
-                let l = lines[i - 1].trim();
-                let stripped = l
-                    .strip_prefix("///")
-                    .or_else(|| l.strip_prefix("//!"))
-                    .or_else(|| l.strip_prefix("//"))
-                    .or_else(|| l.strip_prefix("*"))
-                    .or_else(|| l.strip_prefix("#"));
-                match stripped {
-                    Some(rest) if !l.starts_with("#!") => acc.push(rest.trim().to_string()),
-                    _ => break,
-                }
-                i -= 1;
-            }
-            acc.reverse();
-            doc = acc.join(" ").trim().to_string();
-        }
-    }
-    if doc.len() > 600 {
-        doc.truncate(600);
-        doc.push('\u{2026}');
-    }
-    (sig, doc)
-}
-
-/// "8 modules · 24 classes · 60 functions" — what a container actually holds.
-fn describe_children(graph: &Graph, id: NodeId) -> String {
-    let mut counts = [0usize; 5];
-    let mut stack = vec![id];
-    let mut guard = 0;
-    while let Some(x) = stack.pop() {
-        guard += 1;
-        if guard > 20000 {
-            break;
-        }
-        for c in graph.children(x) {
-            match graph.node(c).kind {
-                NodeKind::Package => counts[0] += 1,
-                NodeKind::Module => counts[1] += 1,
-                NodeKind::Class => counts[2] += 1,
-                NodeKind::Function => counts[3] += 1,
-                NodeKind::Route => counts[4] += 1,
-            }
-            stack.push(c);
-        }
-    }
-    let label = |n: usize, one: &str, many: &str| {
-        if n == 0 {
-            None
-        } else {
-            Some(format!("{n} {}", if n == 1 { one } else { many }))
-        }
-    };
-    [
-        label(counts[0], "package", "packages"),
-        label(counts[1], "module", "modules"),
-        label(counts[2], "class", "classes"),
-        label(counts[3], "function", "functions"),
-        label(counts[4], "route", "routes"),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>()
-    .join(" · ")
 }
 
 fn read_span(file: &str, start: u32, end: u32) -> String {
