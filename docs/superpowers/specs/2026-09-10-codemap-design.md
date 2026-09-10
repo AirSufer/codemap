@@ -327,8 +327,12 @@ Measured 2026-09-10 (marked M); the rest remain targets (T):
 - **M** Full index, 787 Python files / 11.8 MB: **805ms**, 978 files/s, 0 parse failures.
 - **M** Steady-state RSS with trees dropped: **15.9 MB**. With trees retained: 266 MB (16.7x).
 - **M** tree-sitter 0.27 loads Python 0.25, TypeScript 0.23 (ABI 14), Go 0.25, Rust 0.24 — no ABI mismatch.
-- **T** Hook overhead: < 5ms wall time (socket write and exit; the agent blocks on this).
-- **T** Incremental re-parse of one changed file: < 10ms.
+- **M** Hook overhead: **4.78ms** with no daemon, **4.98ms** with one (50 runs each).
+  Inside the 5ms budget but at its edge, and dominated by process spawn rather than
+  by any work the hook does. A resident helper would be the fix if it ever matters.
+- **T** Incremental re-parse of one changed file: < 10ms. NOT IMPLEMENTED — a file
+  change currently triggers a full repo reindex (~805ms). Acceptable for now,
+  and the most obvious remaining optimization.
 - **T** Frame rate: 60fps at up to ~200 visible nodes.
 
 **The spike is complete** (2026-09-10, results above). It cut lazy indexing from the design
