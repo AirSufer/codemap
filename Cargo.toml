@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/codemap-graph"]
+members = ["crates/codemap-graph", "crates/codemap-index"]
 resolver = "2"
 
 [workspace.package]

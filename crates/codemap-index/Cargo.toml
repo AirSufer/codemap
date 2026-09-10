@@ -1,0 +1,11 @@
+[package]
+name = "codemap-index"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+codemap-graph = { path = "../codemap-graph" }
+tree-sitter.workspace = true
+tree-sitter-python.workspace = true
+serde.workspace = true
