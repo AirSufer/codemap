@@ -3,10 +3,10 @@ use crate::lang::go::GoExtractor;
 use crate::lang::python::PythonExtractor;
 use crate::lang::rust_lang::RustExtractor;
 use crate::lang::typescript::TypeScriptExtractor;
-use crate::walker::walk_repo;
+use crate::walker::walk_repo_opts;
 use codemap_graph::{EdgeKind, Graph, Node, NodeId, NodeKind};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn extractor_for(path: &Path) -> Option<Box<dyn LanguageExtractor>> {
     let ext = path.extension()?.to_str()?;
@@ -122,12 +122,21 @@ pub fn index_repo(root: &Path) -> Graph {
 }
 
 pub fn index_repo_with_stats(root: &Path) -> (Graph, IndexStats) {
+    index_repo_opts(root, false)
+}
+
+/// `include_all` keeps tests, migrations and generated code in the graph.
+pub fn index_repo_opts(root: &Path, include_all: bool) -> (Graph, IndexStats) {
     let mut g = Graph::new();
     let mut table = SymbolTable::default();
     // (owner node id, callee string, resolvable flag)
     let mut pending: Vec<(NodeId, String, bool)> = Vec::new();
 
-    for file in walk_repo(root) {
+    // Directory nodes, so the top level shows a handful of packages rather
+    // than every file in the repo flat (spec section 4, level L0/L1).
+    let mut packages: HashMap<PathBuf, NodeId> = HashMap::new();
+
+    for file in walk_repo_opts(root, include_all) {
         let Some(ex) = extractor_for(&file) else {
             continue;
         };
@@ -142,6 +151,11 @@ pub fn index_repo_with_stats(root: &Path) -> (Graph, IndexStats) {
         let mut module = Node::new(NodeKind::Module, &modpath, &file_s, 1, line_count);
         module.qualified_name = modpath.clone();
         let module_id = g.add_node(module);
+        if let Some(dir) = file.parent() {
+            if let Some(pkg) = ensure_package(&mut g, &mut packages, root, dir) {
+                g.add_edge(pkg, module_id, EdgeKind::Contains);
+            }
+        }
 
         // Containers (classes)
         let mut class_ids: HashMap<String, NodeId> = HashMap::new();
@@ -221,4 +235,34 @@ pub fn index_repo_with_stats(root: &Path) -> (Graph, IndexStats) {
     }
 
     (g, stats)
+}
+
+/// Creates Package nodes for `dir` and every ancestor up to `root`, linking
+/// each into its parent. Memoized so each directory yields exactly one node.
+/// Without these the top level renders every file in the repo flat, which is
+/// the hairball the nested-scale model exists to avoid (spec section 4).
+fn ensure_package(
+    g: &mut Graph,
+    seen: &mut HashMap<PathBuf, NodeId>,
+    root: &Path,
+    dir: &Path,
+) -> Option<NodeId> {
+    let rel = dir.strip_prefix(root).ok()?;
+    if rel.as_os_str().is_empty() {
+        return None; // the repo root itself is the implicit top level
+    }
+    if let Some(id) = seen.get(dir) {
+        return Some(*id);
+    }
+    let name = dir.file_name()?.to_string_lossy().to_string();
+    let mut n = Node::new(NodeKind::Package, &name, &dir.to_string_lossy(), 0, 0);
+    n.qualified_name = rel.to_string_lossy().replace('/', ".");
+    let id = g.add_node(n);
+    seen.insert(dir.to_path_buf(), id);
+    if let Some(parent) = dir.parent() {
+        if let Some(pid) = ensure_package(g, seen, root, parent) {
+            g.add_edge(pid, id, EdgeKind::Contains);
+        }
+    }
+    Some(id)
 }

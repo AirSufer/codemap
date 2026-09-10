@@ -3,7 +3,7 @@ mod ticker;
 
 use clap::{Parser, Subcommand};
 use codemap_graph::NodeKind;
-use codemap_index::indexer::{index_repo, index_repo_with_stats};
+use codemap_index::indexer::index_repo;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -26,6 +26,9 @@ enum Cmd {
         /// Emit the full graph as JSON
         #[arg(long)]
         json: bool,
+        /// Include tests, migrations, examples and generated code
+        #[arg(long)]
+        all: bool,
     },
     /// List the API routes that can reach a symbol
     Reach { path: PathBuf, symbol: String },
@@ -76,12 +79,13 @@ fn main() -> ExitCode {
         Cmd::Hook { agent } => cmd_hook(agent),
         Cmd::InstallHooks { dry_run, uninstall } => cmd_install(dry_run, uninstall),
         Cmd::Ticker { path } => cmd_ticker(path),
-        Cmd::Index { path, json } => {
-            let (g, st) = index_repo_with_stats(&path);
+        Cmd::Index { path, json, all } => {
+            let (g, st) = codemap_index::indexer::index_repo_opts(&path, all);
             if json {
                 println!("{}", serde_json::to_string_pretty(&g).unwrap());
             } else {
                 let c = |k: NodeKind| g.nodes().iter().filter(|n| n.kind == k).count();
+                println!("packages  {}", c(NodeKind::Package));
                 println!("modules   {}", c(NodeKind::Module));
                 println!("classes   {}", c(NodeKind::Class));
                 println!("functions {}", c(NodeKind::Function));

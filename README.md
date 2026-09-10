@@ -102,6 +102,21 @@ only `calls` edges are heuristic.
 No telemetry, no network calls, nothing leaves your machine. The UI binds to
 loopback and is embedded in the binary — no CDN, no external assets.
 
+## What gets indexed
+
+Your source, not your dependencies or your test suite. Excluded by default:
+
+- **Vendored / build output** — `node_modules`, `target`, `dist`, `build`, `venv`,
+  `site-packages`, `vendor`, `third_party`, `.next`, `coverage`
+- **Tests** — `tests/`, `spec/`, `e2e/`, `fixtures/`, and files named `test_*.py`,
+  `*_test.go`, `*.test.ts`, `*.spec.ts`, `conftest.py`
+- **Generated** — `*_pb2.py`, `*.pb.go`, `*.d.ts`, `*.min.js`, `*.generated.*`,
+  `baml_client/`, `__generated__/`
+- **Not-the-codebase** — `migrations/`, `alembic/`, `examples/`, `docs/`, `scripts/`
+
+Pass `--all` to include everything. On a real service this is the difference
+between 788 modules (46% of them tests) and 360 modules of actual source.
+
 ## Languages
 
 Python, TypeScript/JavaScript, Go, Rust. Route detection covers FastAPI/Flask,
