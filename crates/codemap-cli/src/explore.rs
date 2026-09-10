@@ -829,8 +829,29 @@ fn render_list(
     );
 }
 
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut line = String::new();
+    for w in text.split_whitespace() {
+        if !line.is_empty() && line.chars().count() + w.chars().count() + 1 > width {
+            out.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(w);
+    }
+    if !line.is_empty() {
+        out.push(line);
+    }
+    out
+}
+
 fn preview(f: &mut Frame, area: Rect, app: &App) {
+    use codemap_index::describe;
     let n = app.g.node(app.sel);
+    let w = area.width.saturating_sub(3) as usize;
+    let is_container = matches!(n.kind, NodeKind::Module | NodeKind::Package);
     let callers = app.g.callers(app.sel);
     let callees = app.g.callees(app.sel);
     let routes = app.g.routes_reaching(app.sel);
@@ -838,113 +859,225 @@ fn preview(f: &mut Frame, area: Rect, app: &App) {
     let total = resolved + n.unresolved_calls;
     let pct = (100 * resolved).checked_div(total).unwrap_or(100);
 
-    let names = |v: &Vec<NodeId>, hint: &str| -> Line<'static> {
-        if v.is_empty() {
-            return Line::from(vec![Span::styled("  \u{2014}", Style::new().fg(DIMMER))]);
+    let row = |t: &str, spans: Vec<Span<'static>>| {
+        let mut v = vec![Span::styled(format!("{t:<10}"), Style::new().fg(DIMMER))];
+        v.extend(spans);
+        Line::from(v)
+    };
+    let node_spans = |ids: &[NodeId], take: usize| -> Vec<Span<'static>> {
+        if ids.is_empty() {
+            return vec![Span::styled("\u{2014}", Style::new().fg(DIMMER))];
         }
         let mut sp = Vec::new();
-        for &id in v.iter().take(3) {
+        for &id in ids.iter().take(take) {
             let m = app.g.node(id);
             sp.push(Span::styled(
                 format!("{}  ", m.name),
                 Style::new().fg(Color::White),
             ));
+        }
+        if ids.len() > take {
             sp.push(Span::styled(
-                format!("{}   ", m.file.rsplit('/').next().unwrap_or("")),
+                format!("+{} more", ids.len() - take),
                 Style::new().fg(DIMMER),
             ));
         }
-        if !hint.is_empty() {
-            sp.push(Span::styled(hint.to_string(), Style::new().fg(DIMMER)));
-        }
-        Line::from(sp)
-    };
-    let row = |label: &str, l: Line<'static>| {
-        let mut sp = vec![Span::styled(
-            format!("{label:<10}"),
-            Style::new().fg(DIMMER),
-        )];
-        sp.extend(l.spans);
-        Line::from(sp)
+        sp
     };
 
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(n.name.clone(), Style::new().fg(Color::White).bold()),
-            Span::styled(
-                format!(
-                    "   {} \u{b7} {}:{}",
-                    match n.kind {
-                        NodeKind::Function => "fn",
-                        NodeKind::Class => "type",
-                        NodeKind::Route => "route",
-                        NodeKind::Module => "file",
-                        NodeKind::Package => "crate",
-                    },
-                    n.file.rsplit('/').next().unwrap_or(""),
-                    n.line_start
-                ),
-                Style::new().fg(DIMMER),
+    let kindword = match n.kind {
+        NodeKind::Function => "fn",
+        NodeKind::Class => "type",
+        NodeKind::Route => "route",
+        NodeKind::Module => "file",
+        NodeKind::Package => "crate",
+    };
+    let mut lines = vec![Line::from(vec![
+        Span::styled(n.name.clone(), Style::new().fg(Color::White).bold()),
+        Span::styled(
+            format!(
+                "   {kindword} \u{b7} {}:{}",
+                n.file.rsplit('/').next().unwrap_or(""),
+                n.line_start
             ),
-        ]),
-        Line::from(Span::styled(
-            format!("{pct}% of call sites resolved"),
-            Style::new().fg(if pct >= 50 { ROUTE } else { WARN }),
-        )),
-        Line::from(""),
-        row("called by", names(&callers, "gr to hop")),
-        row("calls", names(&callees, "gc to hop")),
-        row(
-            "routes",
-            if routes.is_empty() {
-                Line::from(vec![
-                    Span::styled("none found ", Style::new().fg(DIMMER)),
-                    Span::styled("\u{2014} unknown, not unreachable", Style::new().fg(DIMMER)),
-                ])
-            } else {
-                names(&routes, "gR to hop")
-            },
+            Style::new().fg(DIMMER),
         ),
-    ];
-    if !n.dependencies.is_empty() {
+    ])];
+
+    // --- what it does: the doc comment, wrapped, or an honest absence ---
+    let source = describe::read_span(&n.file, n.line_start, n.line_end, 400);
+    let doc = describe::doc(&n.file, n.line_start, &source);
+    lines.push(Line::from(""));
+    if doc.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "no doc comment here",
+            Style::new().fg(DIMMER).italic(),
+        )));
+    } else {
+        for l in wrap(&doc, w).into_iter().take(5) {
+            lines.push(Line::from(Span::styled(
+                l,
+                Style::new().fg(Color::Rgb(200, 206, 219)),
+            )));
+        }
+    }
+
+    if is_container {
+        // --- a file/crate is described by what it holds and what leans on it ---
+        lines.push(Line::from(""));
+        lines.push(row(
+            "holds",
+            vec![Span::styled(
+                describe::composition(&app.g, app.sel),
+                Style::new().fg(Color::White),
+            )],
+        ));
+        let busy = describe::busiest(&app.g, app.sel, 4);
+        if !busy.is_empty() {
+            let mut sp = Vec::new();
+            for (id, c) in &busy {
+                sp.push(Span::styled(
+                    app.g.node(*id).name.to_string(),
+                    Style::new().fg(Color::White),
+                ));
+                sp.push(Span::styled(
+                    format!(" \u{2190}{c}  "),
+                    Style::new().fg(DIMMER),
+                ));
+            }
+            lines.push(row("busiest", sp));
+        }
+        let rts = describe::routes_within(&app.g, app.sel);
+        if !rts.is_empty() {
+            lines.push(row("defines", node_spans(&rts, 3)));
+        }
+        let deps = describe::deps_within(&app.g, app.sel, 6);
         lines.push(row(
             "uses",
-            Line::from(Span::styled(
-                n.dependencies
-                    .iter()
-                    .take(4)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join("  "),
-                Style::new().fg(DEP),
-            )),
+            if deps.is_empty() {
+                vec![Span::styled(
+                    "stdlib and this repo only",
+                    Style::new().fg(DIMMER),
+                )]
+            } else {
+                vec![Span::styled(deps.join("  "), Style::new().fg(DEP))]
+            },
         ));
+    } else {
+        // --- a symbol is described by its signature and its neighbours ---
+        let sig = describe::signature(&source);
+        if !sig.is_empty() {
+            lines.push(Line::from(""));
+            for l in wrap(&sig, w).into_iter().take(3) {
+                lines.push(Line::from(Span::styled(l, Style::new().fg(CLASS))));
+            }
+        }
+        lines.push(Line::from(""));
+        lines.push(row("called by", node_spans(&callers, 4)));
+        lines.push(row("calls", node_spans(&callees, 4)));
+        lines.push(row(
+            "routes",
+            if routes.is_empty() {
+                vec![
+                    Span::styled("none found ", Style::new().fg(DIMMER)),
+                    Span::styled("\u{2014} unknown, not unreachable", Style::new().fg(DIMMER)),
+                ]
+            } else {
+                node_spans(&routes, 3)
+            },
+        ));
+        if !n.dependencies.is_empty() {
+            lines.push(row(
+                "uses",
+                vec![Span::styled(
+                    n.dependencies
+                        .iter()
+                        .take(5)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join("  "),
+                    Style::new().fg(DEP),
+                )],
+            ));
+        }
     }
-    lines.push(Line::from(""));
 
-    // source, numbered
+    // --- how much of this codemap actually knows ---
+    lines.push(Line::from(""));
+    let bar_w = 18usize;
+    let filled = (pct as usize * bar_w) / 100;
+    lines.push(Line::from(vec![
+        Span::styled(format!("{:<10}", "resolved"), Style::new().fg(DIMMER)),
+        Span::styled(
+            "\u{2588}".repeat(filled),
+            Style::new().fg(if pct >= 50 { ROUTE } else { WARN }),
+        ),
+        Span::styled("\u{2591}".repeat(bar_w - filled), Style::new().fg(LINE)),
+        Span::styled(format!("  {pct}%"), Style::new().fg(DIM)),
+        Span::styled(
+            if n.unresolved_calls > 0 {
+                format!("  {} unresolved", n.unresolved_calls)
+            } else {
+                String::new()
+            },
+            Style::new().fg(WARN),
+        ),
+    ]));
+
+    // --- what you can do from here, so the keys are never a memory test ---
+    lines.push(Line::from(""));
+    let mut acts: Vec<Span<'static>> = Vec::new();
+    let act = |k: &str, t: &str, on: bool| {
+        vec![
+            Span::styled(
+                k.to_string(),
+                Style::new().fg(if on { AGENT } else { LINE }),
+            ),
+            Span::styled(
+                format!(" {t}   "),
+                Style::new().fg(if on { DIM } else { LINE }),
+            ),
+        ]
+    };
+    acts.extend(act("gr", "callers", !callers.is_empty()));
+    acts.extend(act("gc", "calls", !callees.is_empty()));
+    acts.extend(act("gR", "routes", !routes.is_empty()));
+    acts.extend(act("l", "into", !app.g.children(app.sel).is_empty()));
+    lines.push(Line::from(acts));
+    let mut acts2: Vec<Span<'static>> = Vec::new();
+    acts2.extend(act("e", "editor", true));
+    acts2.extend(act("y", "yank", true));
+    acts2.extend(act(":ask", "prompt agent", true));
+    acts2.extend(act("ga", "agent", app.agent.is_some()));
+    lines.push(Line::from(acts2));
+
+    // --- source, numbered, only as much as fits ---
     if let Ok(text) = std::fs::read_to_string(&n.file) {
-        let budget = area.height.saturating_sub(lines.len() as u16 + 1) as usize;
-        // A module's span is the whole file; show only its head so the pane
-        // stays a preview rather than a pager.
-        let span = if matches!(n.kind, NodeKind::Module | NodeKind::Package) {
-            budget.min(24)
-        } else {
-            budget.min(n.line_end.saturating_sub(n.line_start) as usize + 1)
-        };
-        for (i, l) in text
-            .lines()
-            .skip(n.line_start.saturating_sub(1) as usize)
-            .take(span)
-            .enumerate()
-        {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{:>4} ", n.line_start as usize + i),
-                    Style::new().fg(LINE),
-                ),
-                Span::styled(l.to_string(), Style::new().fg(Color::Rgb(174, 182, 198))),
-            ]));
+        let budget = area.height.saturating_sub(lines.len() as u16 + 2) as usize;
+        if budget > 2 {
+            lines.push(Line::from(""));
+            let span = if is_container {
+                budget.min(20)
+            } else {
+                budget.min(n.line_end.saturating_sub(n.line_start) as usize + 1)
+            };
+            for (i, l) in text
+                .lines()
+                .skip(n.line_start.saturating_sub(1) as usize)
+                .take(span)
+                .enumerate()
+            {
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("{:>4} ", n.line_start as usize + i),
+                        Style::new().fg(LINE),
+                    ),
+                    Span::styled(
+                        l.chars().take(w).collect::<String>(),
+                        Style::new().fg(Color::Rgb(174, 182, 198)),
+                    ),
+                ]));
+            }
         }
     }
     let inner = Rect {

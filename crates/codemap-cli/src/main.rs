@@ -272,6 +272,12 @@ fn abs(p: PathBuf) -> PathBuf {
     p.canonicalize().unwrap_or(p)
 }
 
+/// What the UI commands should map: the project, not whatever subdirectory you
+/// happened to be standing in. Falls back to the given path outside a repo.
+fn project_root(p: PathBuf) -> PathBuf {
+    codemap_index::describe::repo_root(&abs(p))
+}
+
 fn cmd_start(path: PathBuf, port: u16) -> ExitCode {
     let root = abs(path);
     if codemap_daemon::server::is_running(&root) {
@@ -678,7 +684,7 @@ fn ensure_daemon(root: &Path) -> Option<u16> {
 }
 
 fn cmd_ui(path: PathBuf) -> ExitCode {
-    let root = abs(path);
+    let root = project_root(path);
     let Some(port) = ensure_daemon(&root) else {
         eprintln!("codemap: could not start a daemon for {}", root.display());
         return ExitCode::FAILURE;
@@ -696,7 +702,7 @@ fn cmd_ui(path: PathBuf) -> ExitCode {
 }
 
 fn cmd_explore(path: PathBuf, ensure: bool) -> ExitCode {
-    let root = abs(path);
+    let root = project_root(path);
     let port = if ensure {
         ensure_daemon(&root)
     } else {

@@ -40,6 +40,10 @@ codemap -ui .                # browser map, opens your browser
 codemap -term <project_dir>  # full-screen terminal map, vim keys
 ```
 
+Both take a path; `.` is only the default. Either one walks up to the git root,
+so pointing at `src/` still maps the project, and both resolve to the same
+daemon however you spell the path.
+
 The rest:
 
 ```sh
