@@ -859,32 +859,6 @@ fn preview(f: &mut Frame, area: Rect, app: &App) {
     let total = resolved + n.unresolved_calls;
     let pct = (100 * resolved).checked_div(total).unwrap_or(100);
 
-    let row = |t: &str, spans: Vec<Span<'static>>| {
-        let mut v = vec![Span::styled(format!("{t:<10}"), Style::new().fg(DIMMER))];
-        v.extend(spans);
-        Line::from(v)
-    };
-    let node_spans = |ids: &[NodeId], take: usize| -> Vec<Span<'static>> {
-        if ids.is_empty() {
-            return vec![Span::styled("\u{2014}", Style::new().fg(DIMMER))];
-        }
-        let mut sp = Vec::new();
-        for &id in ids.iter().take(take) {
-            let m = app.g.node(id);
-            sp.push(Span::styled(
-                format!("{}  ", m.name),
-                Style::new().fg(Color::White),
-            ));
-        }
-        if ids.len() > take {
-            sp.push(Span::styled(
-                format!("+{} more", ids.len() - take),
-                Style::new().fg(DIMMER),
-            ));
-        }
-        sp
-    };
-
     let kindword = match n.kind {
         NodeKind::Function => "fn",
         NodeKind::Class => "type",
@@ -922,49 +896,7 @@ fn preview(f: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    if is_container {
-        // --- a file/crate is described by what it holds and what leans on it ---
-        lines.push(Line::from(""));
-        lines.push(row(
-            "holds",
-            vec![Span::styled(
-                describe::composition(&app.g, app.sel),
-                Style::new().fg(Color::White),
-            )],
-        ));
-        let busy = describe::busiest(&app.g, app.sel, 4);
-        if !busy.is_empty() {
-            let mut sp = Vec::new();
-            for (id, c) in &busy {
-                sp.push(Span::styled(
-                    app.g.node(*id).name.to_string(),
-                    Style::new().fg(Color::White),
-                ));
-                sp.push(Span::styled(
-                    format!(" \u{2190}{c}  "),
-                    Style::new().fg(DIMMER),
-                ));
-            }
-            lines.push(row("busiest", sp));
-        }
-        let rts = describe::routes_within(&app.g, app.sel);
-        if !rts.is_empty() {
-            lines.push(row("defines", node_spans(&rts, 3)));
-        }
-        let deps = describe::deps_within(&app.g, app.sel, 6);
-        lines.push(row(
-            "uses",
-            if deps.is_empty() {
-                vec![Span::styled(
-                    "stdlib and this repo only",
-                    Style::new().fg(DIMMER),
-                )]
-            } else {
-                vec![Span::styled(deps.join("  "), Style::new().fg(DEP))]
-            },
-        ));
-    } else {
-        // --- a symbol is described by its signature and its neighbours ---
+    if !is_container {
         let sig = describe::signature(&source);
         if !sig.is_empty() {
             lines.push(Line::from(""));
@@ -972,34 +904,21 @@ fn preview(f: &mut Frame, area: Rect, app: &App) {
                 lines.push(Line::from(Span::styled(l, Style::new().fg(CLASS))));
             }
         }
-        lines.push(Line::from(""));
-        lines.push(row("called by", node_spans(&callers, 4)));
-        lines.push(row("calls", node_spans(&callees, 4)));
-        lines.push(row(
-            "routes",
-            if routes.is_empty() {
-                vec![
-                    Span::styled("none found ", Style::new().fg(DIMMER)),
-                    Span::styled("\u{2014} unknown, not unreachable", Style::new().fg(DIMMER)),
-                ]
-            } else {
-                node_spans(&routes, 3)
-            },
-        ));
-        if !n.dependencies.is_empty() {
-            lines.push(row(
-                "uses",
-                vec![Span::styled(
-                    n.dependencies
-                        .iter()
-                        .take(5)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join("  "),
-                    Style::new().fg(DEP),
-                )],
-            ));
-        }
+    }
+
+    // --- how it connects, as a git-tree; identical to the browser panel ---
+    lines.push(Line::from(""));
+    for l in describe::tree(&app.g, app.sel, w).lines() {
+        let style = if l.contains('\u{26a0}') {
+            Style::new().fg(WARN)
+        } else if l.starts_with('\u{251c}') || l.starts_with('\u{2514}') {
+            Style::new().fg(DIM)
+        } else if l.starts_with(' ') || l.starts_with('\u{2502}') {
+            Style::new().fg(Color::Rgb(200, 206, 219))
+        } else {
+            Style::new().fg(Color::White).bold()
+        };
+        lines.push(Line::from(Span::styled(l.to_string(), style)));
     }
 
     // --- how much of this codemap actually knows ---

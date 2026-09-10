@@ -235,3 +235,298 @@ pub fn read_span(file: &str, start: u32, end: u32, max: usize) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+/* ================= teaching view ================= */
+
+/// One sentence: what this thing is and what role it plays. Falls back to
+/// structure when the code carries no doc comment.
+pub fn headline(graph: &Graph, id: NodeId, doc: &str) -> String {
+    let n = graph.node(id);
+    if !doc.is_empty() {
+        let first = doc
+            .split_terminator(". ")
+            .next()
+            .unwrap_or(doc)
+            .trim()
+            .to_string();
+        return if first.ends_with('.') {
+            first
+        } else {
+            format!("{first}.")
+        };
+    }
+    match n.kind {
+        NodeKind::Module | NodeKind::Package => {
+            let c = composition(graph, id);
+            if c.is_empty() {
+                format!("{} — no symbols indexed.", n.name)
+            } else {
+                format!("{} — holds {}.", n.name, c)
+            }
+        }
+        NodeKind::Route => format!("{} — an HTTP entry point.", n.name),
+        NodeKind::Class => format!(
+            "{} — a type with {} members.",
+            n.name,
+            graph.children(id).len()
+        ),
+        NodeKind::Function => {
+            let inn = graph.callers(id).len();
+            let out = graph.callees(id).len();
+            format!("{} — called from {inn}, calls out to {out}.", n.name)
+        }
+    }
+}
+
+fn trunc(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_string()
+    } else {
+        let mut t: String = s.chars().take(n.saturating_sub(1)).collect();
+        t.push('\u{2026}');
+        t
+    }
+}
+
+/// A git-tree view of what a node is and how it connects.
+///
+/// Tree connectors rather than boxes-and-arrows: it reads like `tree` or
+/// `git log --graph`, which is a shape people already parse without effort.
+/// The load-bearing caveat — call sites that could not be resolved — is a
+/// branch of the tree, not a footnote, because it is what a reader must not
+/// miss when deciding whether the picture is complete.
+pub fn tree(graph: &Graph, id: NodeId, width: usize) -> String {
+    let n = graph.node(id);
+    let w = width.clamp(40, 110);
+    let is_container = matches!(n.kind, NodeKind::Module | NodeKind::Package);
+    let mut out: Vec<String> = Vec::new();
+
+    let loc = |x: NodeId| -> String {
+        let m = graph.node(x);
+        format!(
+            "{}:{}",
+            m.file.rsplit('/').next().unwrap_or(""),
+            m.line_start
+        )
+    };
+
+    // header
+    out.push(format!(
+        "{}  {}",
+        n.name,
+        if is_container {
+            composition(graph, id)
+        } else {
+            format!(
+                "{} \u{b7} {}",
+                match n.kind {
+                    NodeKind::Function => "fn",
+                    NodeKind::Class => "type",
+                    NodeKind::Route => "route",
+                    _ => "",
+                },
+                loc(id)
+            )
+        }
+    ));
+
+    // Sections are built first so the last one can use the closing connector.
+    struct Sec {
+        title: String,
+        rows: Vec<(String, String)>,
+        empty: String,
+    }
+    let mut secs: Vec<Sec> = Vec::new();
+
+    if is_container {
+        let entries = busiest(graph, id, 6);
+        let mut inbound: Vec<(String, String)> = Vec::new();
+        for (sym, _) in &entries {
+            for c in graph.callers(*sym) {
+                if graph.node(c).file != n.file && inbound.len() < 5 {
+                    inbound.push((graph.node(c).name.clone(), loc(c)));
+                }
+            }
+        }
+        inbound.dedup_by(|a, b| a.0 == b.0);
+        secs.push(Sec {
+            title: "reached from".into(),
+            rows: inbound,
+            empty: "nothing outside this file calls into it".into(),
+        });
+
+        let rows: Vec<(String, String)> = anatomy(graph, id, 8)
+            .into_iter()
+            .map(|r| {
+                (
+                    format!("{}  :{}", r.name, r.line),
+                    if r.fan_in > 0 {
+                        format!("\u{2190}{}", r.fan_in)
+                    } else {
+                        String::new()
+                    },
+                )
+            })
+            .collect();
+        secs.push(Sec {
+            title: "holds".into(),
+            rows,
+            empty: "no symbols indexed".into(),
+        });
+
+        let deps = deps_within(graph, id, 8);
+        secs.push(Sec {
+            title: "uses".into(),
+            rows: deps.into_iter().map(|d| (d, String::new())).collect(),
+            empty: "stdlib and this repo only".into(),
+        });
+    } else {
+        secs.push(Sec {
+            title: "called by".into(),
+            rows: graph
+                .callers(id)
+                .into_iter()
+                .take(6)
+                .map(|c| (graph.node(c).name.clone(), loc(c)))
+                .collect(),
+            empty: "nothing indexed calls this".into(),
+        });
+        secs.push(Sec {
+            title: "calls".into(),
+            rows: graph
+                .callees(id)
+                .into_iter()
+                .take(6)
+                .map(|c| (graph.node(c).name.clone(), loc(c)))
+                .collect(),
+            empty: "calls nothing indexed".into(),
+        });
+        let rts = graph.routes_reaching(id);
+        secs.push(Sec {
+            title: "reached from".into(),
+            rows: rts
+                .into_iter()
+                .take(4)
+                .map(|r| (graph.node(r).name.clone(), loc(r)))
+                .collect(),
+            empty: "no route found \u{2014} unknown, not unreachable".into(),
+        });
+        if !n.dependencies.is_empty() {
+            secs.push(Sec {
+                title: "uses".into(),
+                rows: n
+                    .dependencies
+                    .iter()
+                    .take(6)
+                    .map(|d| (d.clone(), String::new()))
+                    .collect(),
+                empty: String::new(),
+            });
+        }
+    }
+
+    let unresolved = if is_container {
+        let mut t = 0;
+        let mut stack = vec![id];
+        while let Some(x) = stack.pop() {
+            t += graph.node(x).unresolved_calls;
+            for c in graph.children(x) {
+                stack.push(c);
+            }
+        }
+        t
+    } else {
+        n.unresolved_calls
+    };
+
+    let total_secs = secs.len() + usize::from(unresolved > 0);
+    for (i, sec) in secs.iter().enumerate() {
+        let last_sec = i + 1 == total_secs;
+        let (branch, spine) = if last_sec {
+            ("\u{2514}\u{2500} ", "   ")
+        } else {
+            ("\u{251c}\u{2500} ", "\u{2502}  ")
+        };
+        out.push(format!("{branch}{}", sec.title));
+        if sec.rows.is_empty() {
+            if !sec.empty.is_empty() {
+                out.push(format!("{spine}\u{2514}\u{2500} {}", sec.empty));
+            }
+        } else {
+            let lastrow = sec.rows.len() - 1;
+            let namew = sec
+                .rows
+                .iter()
+                .map(|(a, _)| a.chars().count())
+                .max()
+                .unwrap_or(0)
+                .min(w.saturating_sub(18));
+            for (j, (a, b)) in sec.rows.iter().enumerate() {
+                let c = if j == lastrow {
+                    "\u{2514}\u{2500} "
+                } else {
+                    "\u{251c}\u{2500} "
+                };
+                let a = trunc(a, namew);
+                if b.is_empty() {
+                    out.push(format!("{spine}{c}{a}"));
+                } else {
+                    out.push(format!("{spine}{c}{a:<namew$}  {b}"));
+                }
+            }
+        }
+    }
+
+    if unresolved > 0 {
+        out.push(format!(
+            "\u{2514}\u{2500} \u{26a0} {unresolved} call site{} unresolved",
+            if unresolved > 1 { "s" } else { "" }
+        ));
+        out.push("   \u{2514}\u{2500} a caller or callee may exist that is not drawn here".into());
+    }
+    out.join("\n")
+}
+
+/// One row per symbol: what it is, where it lives, how many things lean on it.
+pub struct AnatomyRow {
+    pub id: NodeId,
+    pub name: String,
+    pub kind: String,
+    pub line: u32,
+    pub fan_in: usize,
+    pub note: String,
+}
+
+pub fn anatomy(graph: &Graph, id: NodeId, limit: usize) -> Vec<AnatomyRow> {
+    let mut kids: Vec<NodeId> = graph.children(id);
+    // A class's methods matter as much as the class, so pull one level deeper.
+    let mut extra = Vec::new();
+    for &k in &kids {
+        if graph.node(k).kind == NodeKind::Class {
+            extra.extend(graph.children(k));
+        }
+    }
+    kids.extend(extra);
+    let mut rows: Vec<AnatomyRow> = kids
+        .into_iter()
+        .map(|k| {
+            let n = graph.node(k);
+            let fan_in = graph.callers(k).len();
+            AnatomyRow {
+                id: k,
+                name: n.name.clone(),
+                kind: format!("{:?}", n.kind).to_lowercase(),
+                line: n.line_start,
+                fan_in,
+                note: if n.unresolved_calls > 0 {
+                    format!("{} unresolved", n.unresolved_calls)
+                } else {
+                    String::new()
+                },
+            }
+        })
+        .collect();
+    rows.sort_by_key(|r| (std::cmp::Reverse(r.fan_in), r.line));
+    rows.truncate(limit);
+    rows
+}

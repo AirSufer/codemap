@@ -162,7 +162,14 @@ async fn client_loop(socket: WebSocket, state: AppState) {
             match v.get("type").and_then(Value::as_str) {
                 Some("detail") => {
                     if let Some(id) = v.get("id").and_then(Value::as_u64) {
-                        if let Some(d) = st.detail(id as u32) {
+                        // The client measures its own panel, so the tree is
+                        // rendered to the width it will actually be shown at.
+                        let w = v
+                            .get("width")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(72)
+                            .clamp(36, 110) as usize;
+                        if let Some(d) = st.detail(id as u32, w) {
                             st.broadcast(&d);
                         }
                     }
