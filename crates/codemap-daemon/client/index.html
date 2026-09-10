@@ -1,0 +1,384 @@
+<!-- codemap client. No external resources: the spec commits to zero network
+     calls, so the renderer is hand-written rather than a CDN graph library. -->
+<meta charset="utf-8">
+<title>codemap</title>
+<style>
+  :root{--bg:#0b0d12;--fg:#d7dae0;--dim:#5a6272;--line:#1c2230;--panel:#11141b;
+        --active:#ffb454;--trail:#c98a3a;--route:#7ee081;--class:#7aa2f7;
+        --func:#9aa5b8;--module:#414b5e;--accent:#ffb454}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden}
+  #wrap{display:flex;height:100vh}
+  #stage{flex:1;position:relative}
+  canvas{display:block;width:100%;height:100%;cursor:grab}
+  canvas.drag{cursor:grabbing}
+  #hud{position:absolute;top:0;left:0;right:0;padding:10px 14px;pointer-events:none;
+       display:flex;gap:14px;align-items:center;background:linear-gradient(#0b0d12dd,#0b0d1200)}
+  #crumbs{pointer-events:auto}
+  #crumbs span{cursor:pointer;color:var(--dim)}
+  #crumbs span:hover{color:var(--fg)}
+  #crumbs b{color:var(--fg);font-weight:600}
+  #follow{pointer-events:auto;margin-left:auto;border:1px solid var(--line);background:#151922;
+          color:var(--dim);padding:4px 10px;border-radius:4px;cursor:pointer;font:inherit}
+  #follow.on{color:#0b0d12;background:var(--accent);border-color:var(--accent)}
+  #status{position:absolute;bottom:8px;left:14px;color:var(--dim);font-size:11px}
+  #panel{width:380px;border-left:1px solid var(--line);background:var(--panel);
+         display:none;flex-direction:column;overflow:hidden}
+  #panel.open{display:flex}
+  #ph{padding:12px 14px;border-bottom:1px solid var(--line)}
+  #ph .kind{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  #ph .qn{margin-top:4px;word-break:break-all}
+  #ph .loc{color:var(--dim);font-size:11px;margin-top:4px}
+  #pb{flex:1;overflow:auto;padding:12px 14px}
+  .sec{margin-bottom:16px}
+  .sec h4{margin:0 0 6px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .chip{display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;border:1px solid var(--line);
+        border-radius:3px;cursor:pointer;font-size:11px}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .chip.route{border-color:#2c5c38;color:var(--route)}
+  pre{margin:0;padding:8px;background:#0d1016;border:1px solid var(--line);border-radius:4px;
+      overflow:auto;max-height:260px;font-size:11px;line-height:1.5;color:#aab3c2}
+  .warn{color:#d68b5c;font-size:11px}
+  .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .acts button{border:1px solid var(--line);background:#151922;color:var(--fg);
+               padding:4px 8px;border-radius:4px;cursor:pointer;font:inherit;font-size:11px}
+  .acts button:hover{border-color:var(--accent);color:var(--accent)}
+  #empty{color:var(--dim);padding:40px 14px;text-align:center;font-size:12px}
+</style>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <div id="crumbs"></div>
+      <button id="follow" class="on">following</button>
+    </div>
+    <div id="status">connecting…</div>
+  </div>
+  <div id="panel">
+    <div id="ph"><div class="kind"></div><div class="qn"></div><div class="loc"></div></div>
+    <div id="pb"></div>
+  </div>
+</div>
+<script>
+const KIND_COLOR = {route:'--route', class:'--class', function:'--func', module:'--module', package:'--module'};
+const KIND_BASE  = {package:26, module:18, class:13, route:11, function:7};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+let G = {nodes:[], edges:[], root:''};
+let byId = new Map(), children = new Map(), calls = new Map(), rcalls = new Map();
+let level = null;              // current container id (null = repo root)
+let focus = {active:null, ancestors:[], trail:[], following:true, agent:'fs'};
+let sel = null, layout = new Map(), cam = {x:0, y:0, z:1, tx:0, ty:0, tz:1};
+let ws, hover = null;
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+function resize(){ const r = cv.getBoundingClientRect(), d = devicePixelRatio||1;
+  cv.width = r.width*d; cv.height = r.height*d; ctx.setTransform(d,0,0,d,0,0); }
+addEventListener('resize', resize); resize();
+
+/* ---------- data ---------- */
+function ingestGraph(p){
+  G = p; byId = new Map(); children = new Map(); calls = new Map(); rcalls = new Map();
+  for(const n of G.nodes){ byId.set(n.id, n); }
+  for(const n of G.nodes){
+    const key = n.parent === null || n.parent === undefined ? 'root' : n.parent;
+    if(!children.has(key)) children.set(key, []);
+    children.get(key).push(n.id);
+  }
+  for(const e of G.edges){
+    if(e.kind !== 'calls') continue;
+    if(!calls.has(e.from)) calls.set(e.from, []);
+    calls.get(e.from).push(e.to);
+    if(!rcalls.has(e.to)) rcalls.set(e.to, []);
+    rcalls.get(e.to).push(e.from);
+  }
+  relayout();
+}
+const kidsOf = id => children.get(id === null ? 'root' : id) || [];
+
+/* ---------- layout: force-directed within the current container ---------- */
+function relayout(){
+  const ids = kidsOf(level);
+  layout = new Map();
+  const n = ids.length || 1, R = 30 + Math.sqrt(n) * 46;
+  ids.forEach((id, i) => {
+    const a = (i / n) * Math.PI * 2, jitter = ((id * 2654435761) % 1000) / 1000;
+    layout.set(id, {x: Math.cos(a)*R*(.55+jitter*.6), y: Math.sin(a)*R*(.55+jitter*.6),
+                    z: (jitter-.5)*90, vx:0, vy:0, vz:0});
+  });
+  for(let s=0; s<220; s++) step(ids);
+}
+function step(ids){
+  for(let i=0;i<ids.length;i++){
+    const a = layout.get(ids[i]);
+    for(let j=i+1;j<ids.length;j++){
+      const b = layout.get(ids[j]);
+      let dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z;
+      let d2 = dx*dx+dy*dy+dz*dz+.01, d = Math.sqrt(d2);
+      const rep = 5200/d2;
+      dx/=d; dy/=d; dz/=d;
+      a.vx-=dx*rep; a.vy-=dy*rep; a.vz-=dz*rep;
+      b.vx+=dx*rep; b.vy+=dy*rep; b.vz+=dz*rep;
+    }
+  }
+  const inside = new Set(ids);
+  for(const id of ids){
+    const a = layout.get(id);
+    for(const t of (calls.get(id)||[])){
+      if(!inside.has(t)) continue;
+      const b = layout.get(t);
+      const dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z;
+      const d = Math.sqrt(dx*dx+dy*dy+dz*dz)||1, f=(d-110)*0.012;
+      a.vx+=dx/d*f; a.vy+=dy/d*f; a.vz+=dz/d*f;
+      b.vx-=dx/d*f; b.vy-=dy/d*f; b.vz-=dz/d*f;
+    }
+    a.vx -= a.x*0.004; a.vy -= a.y*0.004; a.vz -= a.z*0.006;
+    a.x+=a.vx*.5; a.y+=a.vy*.5; a.z+=a.vz*.5;
+    a.vx*=.82; a.vy*=.82; a.vz*=.82;
+  }
+}
+
+/* ---------- projection ---------- */
+const FOV = 620;
+function project(p){
+  const z = p.z + 340;
+  const s = (FOV / Math.max(z, 60)) * cam.z;
+  return {x: cv.clientWidth/2 + (p.x - cam.x)*s, y: cv.clientHeight/2 + (p.y - cam.y)*s, s};
+}
+function sizeOf(n){ return (KIND_BASE[n.kind]||8) * (1 + Math.min(n.child_count,40)/28); }
+
+/* ---------- render ---------- */
+function draw(){
+  cam.x += (cam.tx-cam.x)*.12; cam.y += (cam.ty-cam.y)*.12; cam.z += (cam.tz-cam.z)*.12;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = css('--bg'); ctx.fillRect(0,0,W,H);
+
+  const ids = kidsOf(level);
+  const inside = new Set(ids);
+  const trailW = new Map(focus.trail.map(t=>[t.node,t.weight]));
+  const anc = new Set(focus.ancestors);
+
+  // edges inside this container
+  ctx.lineWidth = 1;
+  for(const id of ids){
+    const a = layout.get(id); if(!a) continue;
+    for(const t of (calls.get(id)||[])){
+      if(!inside.has(t)) continue;
+      const b = layout.get(t); if(!b) continue;
+      const pa = project(a), pb = project(b);
+      const lit = id===focus.active || t===focus.active || id===sel || t===sel;
+      ctx.strokeStyle = lit ? css('--active')+'aa' : css('--line');
+      ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke();
+    }
+  }
+
+  // portals: edges leaving this container, bundled onto the shell
+  const portals = new Map();
+  for(const id of ids){
+    for(const t of (calls.get(id)||[])){
+      if(inside.has(t)) continue;
+      const tgt = byId.get(t); if(!tgt) continue;
+      const key = ancestorAtLevel(t);
+      if(key === null || key === undefined || inside.has(key)) continue;
+      if(!portals.has(key)) portals.set(key, 0);
+      portals.set(key, portals.get(key)+1);
+    }
+  }
+  let pi = 0, pn = portals.size;
+  for(const [pid, count] of portals){
+    const ang = (pi++/Math.max(pn,1))*Math.PI*2;
+    const r = Math.min(W,H)*0.42;
+    const x = W/2 + Math.cos(ang)*r, y = H/2 + Math.sin(ang)*r;
+    ctx.fillStyle = css('--dim'); ctx.strokeStyle = css('--line');
+    ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fill();
+    ctx.fillStyle = css('--dim'); ctx.font='10px ui-monospace';
+    const nm = (byId.get(pid)||{}).name || '?';
+    ctx.textAlign = Math.cos(ang)>0 ? 'left':'right';
+    ctx.fillText(`${nm} ×${count}`, x + (Math.cos(ang)>0?9:-9), y+3);
+    portalHit.push({x,y,id:pid});
+  }
+
+  // nodes, painted back to front
+  const drawn = ids.map(id=>({id, p:project(layout.get(id)||{x:0,y:0,z:0})}))
+                   .sort((a,b)=>a.p.s-b.p.s);
+  ctx.textAlign='center';
+  for(const {id,p} of drawn){
+    const n = byId.get(id); if(!n) continue;
+    const rad = Math.max(2, sizeOf(n)*p.s*0.5);
+    const isActive = id===focus.active, tw = trailW.get(id)||0, onPath = anc.has(id);
+    let color = css(KIND_COLOR[n.kind]||'--func');
+    if(isActive) color = css('--active');
+    else if(tw>0) color = css('--trail');
+    ctx.globalAlpha = isActive?1 : tw>0 ? .45+tw*.55 : onPath ? .9 : .62;
+    // container impostor: density hints at how much is inside
+    if(n.child_count>0){
+      ctx.beginPath(); ctx.arc(p.x,p.y,rad*1.9,0,7);
+      ctx.fillStyle = color+'14'; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.fillStyle=color; ctx.fill();
+    if(isActive){ ctx.strokeStyle=css('--active'); ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(p.x,p.y,rad+5+Math.sin(Date.now()/260)*2,0,7); ctx.stroke(); }
+    if(id===sel){ ctx.strokeStyle=css('--fg'); ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(p.x,p.y,rad+3,0,7); ctx.stroke(); }
+    if(rad>6 || isActive || id===hover){
+      ctx.globalAlpha = 1; ctx.fillStyle = isActive?css('--active'):css('--fg');
+      ctx.font = `${Math.min(13,Math.max(9,rad*0.85))}px ui-monospace`;
+      ctx.fillText(n.name.slice(0,28), p.x, p.y - rad - 5);
+    }
+    ctx.globalAlpha = 1;
+    hitboxes.push({x:p.x,y:p.y,r:Math.max(rad,7),id});
+  }
+  requestAnimationFrame(loop);
+}
+let hitboxes = [], portalHit = [];
+function loop(){ hitboxes = []; portalHit = []; draw(); }
+
+function ancestorAtLevel(id){
+  let cur = id, guard = 0;
+  while(cur !== null && cur !== undefined && guard++ < 64){
+    const n = byId.get(cur); if(!n) return null;
+    const par = (n.parent===undefined?null:n.parent);
+    if(par === level) return cur;
+    cur = par;
+  }
+  return null;
+}
+
+/* ---------- interaction ---------- */
+let drag=null;
+cv.addEventListener('mousedown', e=>{ drag={x:e.clientX,y:e.clientY,cx:cam.tx,cy:cam.ty,moved:false}; cv.classList.add('drag'); });
+addEventListener('mouseup', e=>{
+  cv.classList.remove('drag');
+  if(drag && !drag.moved) click(e);
+  drag=null;
+});
+addEventListener('mousemove', e=>{
+  if(drag){
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(Math.abs(dx)+Math.abs(dy)>3){ drag.moved=true; setFollow(false); }
+    cam.tx = drag.cx - dx/cam.z; cam.ty = drag.cy - dy/cam.z;
+    return;
+  }
+  const r = cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  hover = (hitboxes.find(h=>(h.x-mx)**2+(h.y-my)**2 < h.r*h.r)||{}).id ?? null;
+});
+cv.addEventListener('wheel', e=>{ e.preventDefault();
+  cam.tz = Math.max(.25, Math.min(4, cam.tz * (e.deltaY>0?0.9:1.1))); }, {passive:false});
+cv.addEventListener('contextmenu', e=>{ e.preventDefault(); ascend(); });
+
+function click(e){
+  const r = cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const p = portalHit.find(h=>(h.x-mx)**2+(h.y-my)**2 < 100);
+  if(p){ descendTo(p.id); return; }
+  const h = hitboxes.find(h=>(h.x-mx)**2+(h.y-my)**2 < h.r*h.r);
+  if(!h){ return; }
+  const n = byId.get(h.id);
+  if(e.detail>1 && n.child_count>0){ enter(h.id); return; }
+  select(h.id);
+}
+function enter(id){ level = id; sel = null; cam.tx=cam.ty=0; cam.tz=1; relayout(); crumbs(); }
+function ascend(){
+  if(level===null) return;
+  const n = byId.get(level);
+  level = (n && n.parent!==undefined) ? n.parent : null;
+  cam.tx=cam.ty=0; relayout(); crumbs();
+}
+function descendTo(id){ const n=byId.get(id);
+  if(n && n.child_count>0) enter(id); else { level = n?n.parent:null; relayout(); crumbs(); select(id); } }
+
+function chainOf(id){ const out=[]; let c=id, guard=0;
+  while(c!==null && c!==undefined && guard++<64){ out.unshift(c); const n=byId.get(c); c=n?n.parent:null; }
+  return out; }
+function crumbs(){
+  const el = document.getElementById('crumbs');
+  const parts = ['<span data-id="root">'+ (G.root.split('/').pop()||'repo') +'</span>'];
+  for(const id of chainOf(level)) if(id!==null) parts.push('<b>'+(byId.get(id)||{}).name+'</b>');
+  el.innerHTML = parts.join(' <span style="color:#39415280">▸</span> ');
+  el.querySelector('[data-id=root]').onclick = ()=>{ level=null; relayout(); crumbs(); };
+}
+
+function select(id){
+  sel = id;
+  send({type:'detail', id});
+  const n = byId.get(id); if(!n) return;
+  document.getElementById('panel').classList.add('open');
+  document.querySelector('#ph .kind').textContent = n.kind;
+  document.querySelector('#ph .qn').textContent = n.qualified_name;
+  document.querySelector('#ph .loc').textContent = n.file.split('/').slice(-2).join('/')+':'+n.line_start;
+  document.getElementById('pb').innerHTML = '<div id="empty">loading…</div>';
+}
+
+/* ---------- panel ---------- */
+function renderDetail(d){
+  if(d.id !== sel) return;
+  const chip = (id, cls) => { const n=byId.get(id); if(!n) return '';
+    return `<span class="chip ${cls||''}" data-go="${id}">${n.name}</span>`; };
+  const sec = (title, body) => body ? `<div class="sec"><h4>${title}</h4>${body}</div>` : '';
+  const esc = s => s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  document.getElementById('pb').innerHTML =
+    sec('reachable from', d.routes.length ? d.routes.map(r=>chip(r,'route')).join('')
+        : '<span class="warn">no route found — call edges are ~44% complete, so this is not proof none exists</span>')
+  + sec('called by', d.callers.map(c=>chip(c)).join('') || '<span style="color:#5a6272">nothing indexed</span>')
+  + sec('calls', d.callees.map(c=>chip(c)).join('') || '<span style="color:#5a6272">nothing indexed</span>')
+  + (d.unresolved_calls ? `<div class="sec"><span class="warn">${d.unresolved_calls} unresolved call${d.unresolved_calls>1?'s':''} in this node</span></div>` : '')
+  + sec('source', `<pre>${esc(d.source||'')}</pre>`)
+  + `<div class="sec"><h4>send to agent</h4><div class="acts">
+       ${['explain','write tests','find bugs','refactor','trace callers']
+         .map(i=>`<button data-intent="${i}">${i}</button>`).join('')}
+       <button data-open="1">open in editor</button></div>
+       <div style="color:#5a6272;font-size:11px;margin-top:6px">types into the agent pane without submitting</div></div>`;
+
+  document.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>{
+    const id=+el.dataset.go; const n=byId.get(id); if(!n) return;
+    level = n.parent===undefined?null:n.parent; relayout(); crumbs(); select(id); setFollow(false);
+  });
+  document.querySelectorAll('[data-intent]').forEach(el=>el.onclick=()=>{
+    const n=byId.get(d.id);
+    send({type:'send_to_agent', prompt:`${el.dataset.intent} ${n.qualified_name} (${n.file}:${n.line_start})`});
+    el.textContent='sent ✓'; setTimeout(()=>el.textContent=el.dataset.intent, 1200);
+  });
+  const ob = document.querySelector('[data-open]');
+  if(ob) ob.onclick = ()=> send({type:'open_editor', file:d.file, line:d.line_start});
+}
+
+/* ---------- focus ---------- */
+function applyFocus(f){
+  focus = f;
+  document.getElementById('follow').classList.toggle('on', f.following);
+  document.getElementById('follow').textContent = f.following ? 'following '+f.agent : 'detached';
+  if(f.following && f.active!==null && f.active!==undefined){
+    const n = byId.get(f.active);
+    if(n){
+      const want = n.parent===undefined?null:n.parent;
+      if(want !== level){ level = want; relayout(); crumbs(); }
+      const p = layout.get(f.active);
+      if(p){ cam.tx = p.x; cam.ty = p.y; }
+    }
+  }
+  const st = document.getElementById('status');
+  st.textContent = `${G.nodes.length} nodes · ${G.edges.length} edges · trail ${f.trail.length}`
+    + (f.active!==null && byId.get(f.active) ? ` · active ${byId.get(f.active).qualified_name}` : '');
+}
+function setFollow(on){ if(focus.following!==on) send({type:'follow', on}); }
+document.getElementById('follow').onclick = ()=> setFollow(!focus.following);
+addEventListener('keydown', e=>{
+  if(e.key==='Escape') ascend();
+  if(e.key==='f') setFollow(!focus.following);
+});
+
+/* ---------- socket ---------- */
+function send(o){ if(ws && ws.readyState===1) ws.send(JSON.stringify(o)); }
+function connect(){
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if(m.type==='graph'){ ingestGraph(m); crumbs(); }
+    else if(m.type==='focus') applyFocus(m);
+    else if(m.type==='detail') renderDetail(m);
+  };
+  ws.onclose = ()=>{ document.getElementById('status').textContent='disconnected — retrying'; setTimeout(connect, 1200); };
+  ws.onopen  = ()=>{ document.getElementById('status').textContent='connected'; };
+}
+connect(); loop();
+</script>

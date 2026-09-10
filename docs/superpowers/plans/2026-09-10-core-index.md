@@ -1,5 +1,7 @@
 # codemap Core Index — Implementation Plan
 
+> **STATUS: complete.** All 8 tasks implemented; see git history on `feat/core-index`.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A CLI that indexes a repo into a symbol graph and answers "which API routes can reach this function?"
