@@ -130,7 +130,7 @@ pub fn index_repo_opts(root: &Path, include_all: bool) -> (Graph, IndexStats) {
     let mut g = Graph::new();
     let mut table = SymbolTable::default();
     // (owner node id, callee string, resolvable flag)
-    let mut pending: Vec<(NodeId, String, bool)> = Vec::new();
+    let mut pending: Vec<(NodeId, String, bool, u32, u32)> = Vec::new();
 
     // Directory nodes, so the top level shows a handful of packages rather
     // than every file in the repo flat (spec section 4, level L0/L1).
@@ -211,13 +211,13 @@ pub fn index_repo_opts(root: &Path, include_all: bool) -> (Graph, IndexStats) {
         // Defer calls to pass two, when every file's symbols are known.
         for c in &facts.calls {
             let owner = symbol_ids.get(&c.from_symbol).copied().unwrap_or(module_id);
-            pending.push((owner, c.callee.clone(), c.resolvable));
+            pending.push((owner, c.callee.clone(), c.resolvable, c.line, c.col));
         }
     }
 
     // Pass two: resolve callees against the completed table.
     let mut stats = IndexStats::default();
-    for (owner, callee, resolvable) in pending {
+    for (owner, callee, resolvable, line, col) in pending {
         stats.calls_total += 1;
         if !resolvable {
             stats.undeterminable += 1;
@@ -226,7 +226,7 @@ pub fn index_repo_opts(root: &Path, include_all: bool) -> (Graph, IndexStats) {
         }
         match table.resolve(&callee) {
             Some(t) if t != owner => {
-                g.add_edge(owner, t, EdgeKind::Calls);
+                g.add_call_edge(owner, t, line, col);
                 stats.resolved += 1;
             }
             Some(_) => stats.resolved += 1, // self-recursion; counted, no edge

@@ -6,6 +6,12 @@ pub struct Edge {
     pub from: NodeId,
     pub to: NodeId,
     pub kind: EdgeKind,
+    /// Call-site position for Calls edges; (0,0) for structural edges. Needed
+    /// so `--vimgrep` points at the call, not the enclosing function.
+    #[serde(default)]
+    pub line: u32,
+    #[serde(default)]
+    pub col: u32,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -27,7 +33,40 @@ impl Graph {
     }
 
     pub fn add_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) {
-        self.edges.push(Edge { from, to, kind });
+        self.edges.push(Edge {
+            from,
+            to,
+            kind,
+            line: 0,
+            col: 0,
+        });
+    }
+
+    /// Same, but records where the call is written.
+    pub fn add_call_edge(&mut self, from: NodeId, to: NodeId, line: u32, col: u32) {
+        self.edges.push(Edge {
+            from,
+            to,
+            kind: EdgeKind::Calls,
+            line,
+            col,
+        });
+    }
+
+    /// Calls edges out of `id`, with their call-site positions.
+    pub fn call_sites(&self, id: NodeId) -> Vec<&Edge> {
+        self.edges
+            .iter()
+            .filter(|e| e.from == id && e.kind == EdgeKind::Calls)
+            .collect()
+    }
+
+    /// Calls edges into `id`.
+    pub fn call_sites_into(&self, id: NodeId) -> Vec<&Edge> {
+        self.edges
+            .iter()
+            .filter(|e| e.to == id && e.kind == EdgeKind::Calls)
+            .collect()
     }
 
     pub fn node(&self, id: NodeId) -> &Node {

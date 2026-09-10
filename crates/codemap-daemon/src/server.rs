@@ -57,21 +57,15 @@ impl Daemon {
         let app = Router::new()
             .route("/", get(|| async { Html(CLIENT_HTML) }))
             .route("/ws", get(ws_handler))
+            .route("/api/focus", get(focus_json))
             .with_state(state.clone());
 
         let addr = format!("127.0.0.1:{port}");
         let tcp = TcpListener::bind(&addr).await?;
         let actual = tcp.local_addr()?.port();
-        println!("codemap: http://127.0.0.1:{actual}");
-        println!("codemap: socket {}", sock.display());
-        {
-            let g = state.inner.lock().unwrap();
-            println!(
-                "codemap: indexed {} nodes from {}",
-                g.graph.len(),
-                root.display()
-            );
-        }
+        println!("  open      http://127.0.0.1:{actual}");
+        println!("  explore   codemap explore {}", root.display());
+        println!("  ticker    codemap ticker {}", root.display());
         // Record the live port so `codemap ticker` and `install-hooks` can find us.
         let _ = std::fs::write(sock.with_extension("port"), actual.to_string());
 
@@ -105,6 +99,31 @@ fn handle_hook_line(state: &AppState, line: &str) {
             state.broadcast(&state.focus_payload());
         }
     }
+}
+
+/// Where the agent is, as JSON. Backs `codemap agent`, so the CLI does not
+/// need to speak WebSocket for a single fact.
+async fn focus_json(State(state): State<AppState>) -> impl IntoResponse {
+    use std::time::Instant;
+    let g = state.inner.lock().unwrap();
+    let snap = g.focus.snapshot(&g.graph, Instant::now());
+    let body = match snap.active {
+        Some(id) => {
+            let n = g.graph.node(id);
+            serde_json::json!({
+                "name": n.name,
+                "qualified_name": n.qualified_name,
+                "file": n.file,
+                "line": n.line_start,
+                "kind": format!("{:?}", n.kind).to_lowercase(),
+                "agent": snap.agent,
+                "following": snap.following,
+                "ago_secs": snap.last_event_secs.unwrap_or(0),
+            })
+        }
+        None => serde_json::json!({ "name": "", "agent": snap.agent }),
+    };
+    ([("content-type", "application/json")], body.to_string())
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {

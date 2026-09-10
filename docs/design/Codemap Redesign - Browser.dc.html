@@ -286,10 +286,13 @@ class Component extends DCLogic {
     P.set('root', { x: 0, y: -260, z: 0 });
     pk.forEach((id, i) => { const x = (i - (pk.length - 1) / 2) * 820; P.set(id, { x, y: 0, z: 0 });
       const files = G.children.get(id) || [], nf = files.length;
-      files.forEach((f, j) => { const th = nf > 1 ? ((j - (nf - 1) / 2) / (nf - 1)) * 2.1 : 0; const fx = x + Math.sin(th) * 360, fz = 120 * (1 - Math.cos(th)) + 40; P.set(f, { x: fx, y: 320, z: fz });
-        const place = (parent, kids, y0, z0) => kids.forEach((k, m) => { const col = m % 2, row = Math.floor(m / 2); const p = { x: parent.x + (col - .5) * 175, y: y0 + row * 46, z: z0 + row * 60 }; P.set(k, p);
-          const sub = G.children.get(k) || []; if (sub.length) place(p, sub, p.y + 300, p.z + 40); });
-        place(P.get(f), G.children.get(f) || [], 660, fz + 70); }); });
+      // arc radius grows with file count so neighbouring file pills (200 world px wide) never touch
+      const R = Math.max(360, nf * 230 / 2.1);
+      files.forEach((f, j) => { const th = nf > 1 ? ((j - (nf - 1) / 2) / (nf - 1)) * 2.1 : 0; const fx = x + Math.sin(th) * R, fz = R * .33 * (1 - Math.cos(th)) + 40; P.set(f, { x: fx, y: 320, z: fz });
+        // symbols of an open file: one column straight beneath it; class members get their own column to the right
+        const place = (parent, kids, y0, z0, dx) => kids.forEach((k, m) => { const p = { x: parent.x + dx + (m % 2 ? 22 : -22), y: y0 + m * 48, z: z0 + m * 30 }; P.set(k, p);
+          const sub = G.children.get(k) || []; if (sub.length) place(p, sub, p.y + 48, p.z, 250); });
+        place(P.get(f), G.children.get(f) || [], 660, fz + 70, 0); }); });
     this.P = P; this.rootNode = { id: 'root', name: 'codemap', kind: 'project', parent: null, child_count: pk.length, file: 'Cargo.toml', line_start: 1 };
     this.cam = { yaw: -.28, pitch: .2, dist: 2600, tx: 0, ty: 0, tz: 0 }; this.goal = { ...this.cam };
     this.fitAll();
@@ -300,7 +303,7 @@ class Component extends DCLogic {
   visibleIds(s = this.state) { const o = this.openSet(s), out = ['root']; for (const [id] of this.P) { if (id === 'root') continue; const n = this.G.byId.get(id), pid = n.parent == null ? 'root' : n.parent; if (o.has(pid)) out.push(id); } return out; }
   fitAll() { const ids = this.visibleIds(), pts = ids.map(id => this.P.get(id)), xs = pts.map(p => p.x), ys = pts.map(p => p.y), zs = pts.map(p => p.z);
     const b = { cx: (Math.min(...xs) + Math.max(...xs)) / 2, cy: (Math.min(...ys) + Math.max(...ys)) / 2, cz: (Math.min(...zs) + Math.max(...zs)) / 2, w: Math.max(...xs) - Math.min(...xs) + 320, h: Math.max(...ys) - Math.min(...ys) + 160 };
-    const f = 1000, cw = this.cw || 800, ch = this.ch || 420; const dist = Math.max(b.w * f / (cw * .9), b.h * f / (ch * .78)) - f + 300; Object.assign(this.goal, { tx: b.cx, ty: b.cy, tz: b.cz, dist: Math.max(700, dist) }); }
+    const f = 1000, cw = this.cw || 800, ch = Math.max(120, (this.ch || 420) - 56); const dist = Math.max(b.w * f / (cw * .9), b.h * f / (ch * .8)) - f + 300; Object.assign(this.goal, { tx: b.cx, ty: b.cy + 20, tz: b.cz, dist: Math.max(700, dist) }); }
   setupCanvas() {
     const c = document.querySelector('[data-cm-canvas]'); if (!c || c === this.canvas) return;
     this.canvas = c; const el = c.parentElement;
@@ -319,18 +322,24 @@ class Component extends DCLogic {
     c.onwheel = e => { e.preventDefault(); this.goal.dist = Math.max(500, Math.min(5000, this.goal.dist * (1 + e.deltaY * .0012))); this.userMoved = true; };
     if (!this.raf) this.frame();
   }
-  focusOn(id, tight) { const p = this.P.get(id); if (!p) return; const n = this.G.byId.get(id), depth = this.G.chain(id).length;
-    if (!tight && n.child_count) { // frame the node together with what just opened beneath it
-      const kids = (this.G.children.get(id) || []).map(k => this.P.get(k)).concat([p]), xs = kids.map(q => q.x), ys = kids.map(q => q.y), zs = kids.map(q => q.z);
-      const w = Math.max(...xs) - Math.min(...xs) + 360, h = Math.max(...ys) - Math.min(...ys) + 200, f = 1000, dist = Math.max(w * f / ((this.cw || 800) * .9), h * f / ((this.ch || 420) * .75)) - f + 200;
-      return Object.assign(this.goal, { tx: (Math.min(...xs) + Math.max(...xs)) / 2, ty: (Math.min(...ys) + Math.max(...ys)) / 2, tz: (Math.min(...zs) + Math.max(...zs)) / 2, dist: Math.max(700, dist) }); }
-    Object.assign(this.goal, { tx: p.x, ty: p.y + (tight ? 20 : 140), tz: p.z + 60, dist: tight ? 800 : depth >= 3 ? 1100 : depth === 2 ? 1500 : 2200 }); }
+  fitIds(ids, padW = 360, padH = 220) { const pts = ids.map(k => this.P.get(k)).filter(Boolean), xs = pts.map(q => q.x), ys = pts.map(q => q.y), zs = pts.map(q => q.z);
+    const w = Math.max(...xs) - Math.min(...xs) + padW, h = Math.max(...ys) - Math.min(...ys) + padH, f = 1000, ch = Math.max(120, (this.ch || 420) - 56);
+    const dist = Math.max(w * f / ((this.cw || 800) * .9), h * f / (ch * .8)) - f + 200;
+    Object.assign(this.goal, { tx: (Math.min(...xs) + Math.max(...xs)) / 2, ty: (Math.min(...ys) + Math.max(...ys)) / 2 + 20, tz: (Math.min(...zs) + Math.max(...zs)) / 2, dist: Math.max(650, dist) }); }
+  focusOn(id, tight) { const p = this.P.get(id); if (!p) return; const n = this.G.byId.get(id);
+    if (tight) return Object.assign(this.goal, { tx: p.x, ty: p.y + 20, tz: p.z + 60, dist: 800 });
+    // containers: frame the node with what opened beneath it. leaves: frame the parent with all its siblings, so the node is seen in context
+    if (n.child_count) return this.fitIds([id, ...(this.G.children.get(id) || [])]);
+    let pid = n.parent == null ? 'root' : n.parent; const ids = [pid, ...(this.G.children.get(pid) || [])];
+    const pn = this.G.byId.get(pid); if (pn && pn.parent != null) ids.push(pn.parent);
+    this.fitIds(ids, 300, 180); }
   project(p) { const c = this.cam, cy = Math.cos(c.yaw), sy = Math.sin(c.yaw), cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
     let x = p.x - c.tx, y = p.y - c.ty, z = p.z - c.tz; const x1 = x * cy - z * sy, z1 = x * sy + z * cy; const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
     const f = 1000, s = f / (f + z2 + c.dist); return { x: this.cw / 2 + x1 * s, y: this.ch / 2 + y2 * s, s, depth: z2 }; }
   frame = () => {
     this.raf = requestAnimationFrame(this.frame);
     const c = this.canvas, s = this.state; if (!c || !this.P || !s.ready) return;
+    if (!this.cw || !this.ch) { const r = c.parentElement.getBoundingClientRect(); if (!r.width) return; const d0 = devicePixelRatio || 1; c.width = r.width * d0; c.height = r.height * d0; this.cw = r.width; this.ch = r.height; if (this.lastFocused != null) this.focusOn(this.lastFocused, false); else this.fitAll(); }
     const ctx = c.getContext('2d'), d = devicePixelRatio || 1, t = performance.now(); ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, this.cw, this.ch);
     const cam = this.cam, g = this.goal, k = .08; for (const key of ['dist', 'tx', 'ty', 'tz']) cam[key] += (g[key] - cam[key]) * k;
     if (!this.userMoved) { cam.yaw = g.yaw + Math.sin(t / 9000) * .09; cam.pitch = g.pitch + Math.sin(t / 13000) * .03; }
@@ -338,7 +347,7 @@ class Component extends DCLogic {
     const col = { project: '#e9e9ed', route: '#6fd3a0', class: '#7fb0ff', module: '#9184d9', package: '#a3a7b8', function: '#c9ccd6' }, dimc = { project: '#5a5f75', route: '#2d6a4d', class: '#2a3d66', module: '#3a3466', package: '#3a3d4d', function: '#2a2e3d' };
     const items = []; for (const id of this.visibleIds(s)) { const p = this.P.get(id), pr = this.project(p); items.push({ id, p, pr }); }
     ctx.font = '12px Aileron, system-ui, sans-serif';
-    const dims = new Map(); const wOf = (n, sc) => { let w = dims.get(n.id); if (w == null) { w = Math.min(200, Math.max(96, ctx.measureText(n.name).width + 60)); dims.set(n.id, w); } return w * sc; };
+    if (!this.dims) this.dims = new Map(); const dims = this.dims; const wOf = (n, sc) => { let w = dims.get(n.id); if (w == null) { ctx.font = '12.5px Aileron, system-ui, sans-serif'; w = Math.min(200, Math.max(96, ctx.measureText(n.name).width + 60)); dims.set(n.id, w); } return w * sc; };
     // edges: parent -> child, sampled bezier in 3D
     ctx.lineWidth = 1;
     for (const it of items) { if (it.id === 'root') continue; const n = G.byId.get(it.id), pid = n.parent == null ? 'root' : n.parent, pp = this.P.get(pid); if (!pp) continue;
@@ -356,7 +365,7 @@ class Component extends DCLogic {
       const isAct = it.id === act, isCur = it.id === cur, heat = isAct ? 1 : (trailW.get(it.id) || 0), onPath = chain.has(it.id) || actChain.has(it.id), fog = Math.max(.25, Math.min(1, pr.s * 1.7));
       // level of detail: far-away leaves collapse to dots; crates/files/path nodes keep a readable minimum size
       const leaf = n.kind === 'function' || n.kind === 'route' || n.kind === 'class'; const tiny = leaf && sc * 12 < 7 && !onPath && !heat;
-      if (!leaf || onPath || heat) sc = Math.max(sc, .62);
+      if (n.kind === 'project' || n.kind === 'package' || onPath || heat || isCur) sc = Math.max(sc, .62);
       if (tiny) { if (pr.x < 0 || pr.x > this.cw || pr.y < 0 || pr.y > this.ch) continue; ctx.globalAlpha = .6 * fog; ctx.fillStyle = dimc[n.kind]; ctx.beginPath(); ctx.arc(pr.x, pr.y, 2, 0, 7); ctx.fill(); continue; }
       const w = wOf(n, sc), h = 30 * sc, x = pr.x - w / 2, y = pr.y - h / 2;
       if (x + w < 0 || x > this.cw || y + h < 0 || y > this.ch) continue;

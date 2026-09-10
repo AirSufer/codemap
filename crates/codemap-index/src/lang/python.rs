@@ -150,6 +150,8 @@ fn walk(
                         "identifier" => f.calls.push(RawCall {
                             from_symbol: owner,
                             callee: text(fun, src).to_string(),
+                            line: ch.start_position().row as u32 + 1,
+                            col: ch.start_position().column as u32 + 1,
                             resolvable: true,
                         }),
                         "attribute" => {
@@ -181,6 +183,8 @@ fn walk(
                             };
                             f.calls.push(RawCall {
                                 from_symbol: owner,
+                                line: ch.start_position().row as u32 + 1,
+                                col: ch.start_position().column as u32 + 1,
                                 callee,
                                 resolvable,
                             });

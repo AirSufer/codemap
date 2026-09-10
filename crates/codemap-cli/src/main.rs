@@ -15,7 +15,25 @@ use std::process::ExitCode;
 )]
 struct Cli {
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
+}
+
+/// Answers three things in order: what it is, what you can run, what it will
+/// not do behind your back.
+fn front_door() -> ExitCode {
+    println!("codemap  \u{2014} a live map of your codebase that follows your coding agent");
+    println!();
+    println!("  start  [path]        index, serve the UI, listen for hooks");
+    println!("  explore [path]       full-screen map, vim keys");
+    println!("  ticker [path]        10-row pane for tmux beside your agent");
+    println!("  status · stop        daemon lifecycle");
+    println!();
+    println!("  callers · calls · reach · agent   one hop as text; --vimgrep for quickfix");
+    println!("  index <path>         summary + call-resolution coverage, no daemon");
+    println!("  install-hooks        claude · codex · gemini");
+    println!();
+    println!("Nothing runs until you start it. No telemetry, loopback only.");
+    ExitCode::SUCCESS
 }
 
 #[derive(Subcommand)]
@@ -31,7 +49,13 @@ enum Cmd {
         all: bool,
     },
     /// List the API routes that can reach a symbol
-    Reach { path: PathBuf, symbol: String },
+    Reach {
+        path: PathBuf,
+        symbol: String,
+        /// file:line:col: text, for vim's quickfix list
+        #[arg(long)]
+        vimgrep: bool,
+    },
     /// Start the live daemon for a repo and serve the browser client
     Start {
         #[arg(default_value = ".")]
@@ -69,16 +93,56 @@ enum Cmd {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    /// What calls a symbol
+    Callers {
+        path: PathBuf,
+        symbol: String,
+        /// file:line:col: text, for vim's quickfix list
+        #[arg(long)]
+        vimgrep: bool,
+    },
+    /// What a symbol calls
+    Calls {
+        path: PathBuf,
+        symbol: String,
+        #[arg(long)]
+        vimgrep: bool,
+        /// Also list call sites that could not be resolved
+        #[arg(long)]
+        unresolved: bool,
+    },
+    /// Where your agent is right now (needs a running daemon)
+    Agent {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        vimgrep: bool,
+    },
 }
 
 fn main() -> ExitCode {
-    match Cli::parse().cmd {
+    let Some(cmd) = Cli::parse().cmd else {
+        return front_door();
+    };
+    match cmd {
         Cmd::Start { path, port } => cmd_start(path, port),
         Cmd::Stop { path } => cmd_stop(path),
         Cmd::Status { path } => cmd_status(path),
         Cmd::Hook { agent } => cmd_hook(agent),
         Cmd::InstallHooks { dry_run, uninstall } => cmd_install(dry_run, uninstall),
         Cmd::Ticker { path } => cmd_ticker(path),
+        Cmd::Callers {
+            path,
+            symbol,
+            vimgrep,
+        } => cmd_hops(path, symbol, Dir::In, vimgrep, false),
+        Cmd::Calls {
+            path,
+            symbol,
+            vimgrep,
+            unresolved,
+        } => cmd_hops(path, symbol, Dir::Out, vimgrep, unresolved),
+        Cmd::Agent { path, vimgrep } => cmd_agent(path, vimgrep),
         Cmd::Index { path, json, all } => {
             let (g, st) = codemap_index::indexer::index_repo_opts(&path, all);
             if json {
@@ -135,42 +199,39 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Cmd::Reach { path, symbol } => {
+        Cmd::Reach {
+            path,
+            symbol,
+            vimgrep,
+        } => {
             let g = index_repo(&path);
-            let matches: Vec<_> = g
-                .nodes()
-                .iter()
-                .filter(|n| n.name == symbol || n.qualified_name == symbol)
-                .collect();
-            let n = match matches.len() {
-                0 => {
-                    eprintln!("symbol not found: {symbol}");
-                    return ExitCode::FAILURE;
-                }
-                1 => matches[0],
-                _ => {
-                    // Never silently pick one. Show the candidates so the caller
-                    // can re-run with a qualified name.
-                    eprintln!("{} symbols named {symbol}; qualify one of:", matches.len());
-                    for m in matches.iter().take(20) {
-                        eprintln!("  {}  ({}:{})", m.qualified_name, m.file, m.line_start);
-                    }
-                    if matches.len() > 20 {
-                        eprintln!("  ... and {} more", matches.len() - 20);
-                    }
-                    return ExitCode::FAILURE;
-                }
+            let n = match pick_symbol(&g, &symbol) {
+                Ok(n) => n,
+                Err(c) => return c,
             };
             let routes = g.routes_reaching(n.id);
             if routes.is_empty() {
-                println!(
-                    "{} is not reachable from any detected route",
-                    n.qualified_name
-                );
-            } else {
-                println!("{} is reachable from:", n.qualified_name);
-                for r in routes {
-                    println!("  {}", g.node(r).name);
+                // Exit 2 so a vim mapping or script can tell "no route found"
+                // apart from "symbol not found", and from a real error.
+                println!("# no route found — unknown, not unreachable (exit 2)");
+                return ExitCode::from(2);
+            }
+            for r in routes {
+                let rn = g.node(r);
+                if vimgrep {
+                    println!(
+                        "{}:{}:1: {} \u{2192} {}",
+                        clean(&rn.file),
+                        rn.line_start,
+                        rn.name,
+                        n.name
+                    );
+                } else {
+                    println!(
+                        "{:<28} {}",
+                        format!("{}:{}", short_path(&rn.file), rn.line_start),
+                        rn.name
+                    );
                 }
             }
             ExitCode::SUCCESS
@@ -188,7 +249,43 @@ fn cmd_start(path: PathBuf, port: u16) -> ExitCode {
         eprintln!("codemap: already running for {}", root.display());
         return ExitCode::FAILURE;
     }
-    println!("codemap  {}", root.display());
+    let t0 = std::time::Instant::now();
+    let (g, st) = codemap_index::indexer::index_repo_with_stats(&root);
+    let files = g
+        .nodes()
+        .iter()
+        .filter(|n| n.kind == NodeKind::Module)
+        .count();
+    println!(
+        "\u{2713} indexed   {}   {} files \u{b7} {} nodes \u{b7} {} edges \u{b7} {:.1}s",
+        root.display(),
+        files,
+        g.len(),
+        g.edges().len(),
+        t0.elapsed().as_secs_f32()
+    );
+    println!("\u{2713} watching  filesystem \u{2014} works with any agent or by hand");
+    let hooks: Vec<String> = hooks::targets()
+        .into_iter()
+        .map(|t| {
+            if t.present {
+                format!("{} installed", t.name)
+            } else {
+                format!("{} not found", t.name)
+            }
+        })
+        .collect();
+    println!("\u{2713} hooks     {}", hooks.join("  "));
+    println!();
+    let internal = st.resolved + st.undeterminable + st.ambiguous;
+    println!(
+        "Call edges are heuristic \u{2014} {:.0}% of {} internal call sites resolve here.",
+        st.internal_resolution_pct(),
+        internal
+    );
+    println!("Tests, generated code and vendored deps skipped. Pass --all to include them.");
+    println!();
+
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => {
@@ -197,10 +294,7 @@ fn cmd_start(path: PathBuf, port: u16) -> ExitCode {
         }
     };
     let r2 = root.clone();
-    let res = rt.block_on(async move {
-        println!("codemap: ticker -> codemap ticker {}", r2.display());
-        codemap_daemon::server::Daemon::run(r2, port).await
-    });
+    let res = rt.block_on(async move { codemap_daemon::server::Daemon::run(r2, port).await });
     match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -227,18 +321,44 @@ fn cmd_status(path: PathBuf) -> ExitCode {
     let root = abs(path);
     if codemap_daemon::server::is_running(&root) {
         let port = codemap_daemon::server::daemon_port(&root);
-        println!("running   {}", root.display());
+        println!("\u{25cf} running   {}", root.display());
         println!(
-            "url       http://127.0.0.1:{}",
+            "  url       http://127.0.0.1:{}",
             port.map(|p| p.to_string()).unwrap_or("?".into())
         );
-        println!("ticker    codemap ticker {}", root.display());
-        println!("stop      codemap stop {}", root.display());
+        if let Some(p) = port {
+            if let Some(body) = http_get(p, "/api/focus") {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+                    let agent = v.get("agent").and_then(|x| x.as_str()).unwrap_or("fs");
+                    let name = v
+                        .get("qualified_name")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("");
+                    let ago = v.get("ago_secs").and_then(|x| x.as_u64()).unwrap_or(0);
+                    if name.is_empty() {
+                        println!(
+                            "  agent     none yet \u{2014} waiting for a hook or a file change"
+                        );
+                    } else {
+                        println!("  agent     {agent} \u{b7} last hook {ago}s ago");
+                        let following =
+                            v.get("following").and_then(|x| x.as_bool()).unwrap_or(true);
+                        println!(
+                            "  focus     {name} \u{b7} {}",
+                            if following { "following" } else { "detached" }
+                        );
+                    }
+                }
+            }
+        }
+        println!("  explore   codemap explore {}", root.display());
+        println!("  ticker    codemap ticker {}", root.display());
+        println!("  stop      codemap stop {}", root.display());
         ExitCode::SUCCESS
     } else {
-        println!("not running   {}", root.display());
+        println!("\u{25cb} not running   {}", root.display());
         println!();
-        println!("start with    codemap start {}", root.display());
+        println!("  start with  codemap start {}", root.display());
         ExitCode::FAILURE
     }
 }
@@ -338,4 +458,166 @@ fn cmd_ticker(path: PathBuf) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Dir {
+    In,
+    Out,
+}
+
+/// Resolves a symbol name, listing candidates rather than guessing when the
+/// bare name is ambiguous.
+fn pick_symbol<'a>(
+    g: &'a codemap_graph::Graph,
+    symbol: &str,
+) -> Result<&'a codemap_graph::Node, ExitCode> {
+    let matches: Vec<_> = g
+        .nodes()
+        .iter()
+        .filter(|n| n.name == symbol || n.qualified_name == symbol)
+        .collect();
+    match matches.len() {
+        0 => {
+            eprintln!("symbol not found: {symbol}");
+            Err(ExitCode::FAILURE)
+        }
+        1 => Ok(matches[0]),
+        _ => {
+            eprintln!("{} symbols named {symbol} — pick one:", matches.len());
+            for m in matches.iter().take(20) {
+                eprintln!("  {}  ({}:{})", m.qualified_name, m.file, m.line_start);
+            }
+            Err(ExitCode::FAILURE)
+        }
+    }
+}
+
+fn cmd_hops(path: PathBuf, symbol: String, dir: Dir, vimgrep: bool, unresolved: bool) -> ExitCode {
+    let g = index_repo(&path);
+    let n = match pick_symbol(&g, &symbol) {
+        Ok(n) => n,
+        Err(c) => return c,
+    };
+    let edges = if dir == Dir::In {
+        g.call_sites_into(n.id)
+    } else {
+        g.call_sites(n.id)
+    };
+    if edges.is_empty() && !vimgrep {
+        println!(
+            "no {} indexed for {}",
+            if dir == Dir::In { "callers" } else { "calls" },
+            n.qualified_name
+        );
+    }
+    for e in &edges {
+        // The call site lives in the caller's file either way.
+        let site = g.node(e.from);
+        let (from, to) = (g.node(e.from), g.node(e.to));
+        let (line, col) = if e.line > 0 {
+            (e.line, e.col)
+        } else {
+            (site.line_start, 1)
+        };
+        if vimgrep {
+            println!(
+                "{}:{}:{}: {} \u{2192} {}",
+                clean(&site.file),
+                line,
+                col,
+                from.name,
+                to.name
+            );
+        } else {
+            println!(
+                "{:<28} {} \u{2192} {}",
+                format!("{}:{}", short_path(clean(&site.file)), line),
+                from.name,
+                to.name
+            );
+        }
+    }
+    if dir == Dir::Out && n.unresolved_calls > 0 {
+        if unresolved {
+            println!(
+                "# {} unresolved call site{} in {} — target unknown, not absent",
+                n.unresolved_calls,
+                if n.unresolved_calls > 1 { "s" } else { "" },
+                n.name
+            );
+        } else {
+            println!(
+                "# {} unresolved call site{} omitted — pass --unresolved to list them",
+                n.unresolved_calls,
+                if n.unresolved_calls > 1 { "s" } else { "" }
+            );
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn clean(p: &str) -> &str {
+    p.strip_prefix("./").unwrap_or(p)
+}
+
+fn short_path(p: &str) -> String {
+    let parts: Vec<&str> = p.rsplit('/').take(2).collect();
+    parts.into_iter().rev().collect::<Vec<_>>().join("/")
+}
+
+/// Asks the running daemon where the agent is. Exits 2 when nothing is known,
+/// matching `reach`, so a vim mapping can branch on it.
+fn cmd_agent(path: PathBuf, vimgrep: bool) -> ExitCode {
+    let root = abs(path);
+    let Some(port) = codemap_daemon::server::daemon_port(&root) else {
+        eprintln!(
+            "no daemon for {} — run `codemap start` first",
+            root.display()
+        );
+        return ExitCode::from(2);
+    };
+    let body = match http_get(port, "/api/focus") {
+        Some(b) => b,
+        None => {
+            eprintln!("daemon on port {port} did not answer");
+            return ExitCode::from(2);
+        }
+    };
+    let v: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(_) => return ExitCode::from(2),
+    };
+    let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("");
+    if name.is_empty() {
+        println!("# no agent activity yet");
+        return ExitCode::from(2);
+    }
+    let file = v.get("file").and_then(|x| x.as_str()).unwrap_or("");
+    let line = v.get("line").and_then(|x| x.as_u64()).unwrap_or(1);
+    let ago = v.get("ago_secs").and_then(|x| x.as_u64()).unwrap_or(0);
+    let ago_s = if ago < 60 {
+        format!("{ago}s ago")
+    } else {
+        format!("{}m ago", ago / 60)
+    };
+    if vimgrep {
+        println!("{}:{line}:1: {name} \u{25cf} {ago_s}", clean(file));
+    } else {
+        println!("{name}  {}:{}  \u{25cf} {ago_s}", short_path(file), line);
+    }
+    ExitCode::SUCCESS
+}
+
+fn http_get(port: u16, path: &str) -> Option<String> {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
+    write!(
+        s,
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    )
+    .ok()?;
+    let mut buf = String::new();
+    s.read_to_string(&mut buf).ok()?;
+    buf.split_once("\r\n\r\n").map(|(_, b)| b.to_string())
 }

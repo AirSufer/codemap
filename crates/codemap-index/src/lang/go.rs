@@ -199,6 +199,8 @@ fn record_call(
         "identifier" => f.calls.push(RawCall {
             from_symbol: owner,
             callee: text(fun, src).to_string(),
+            line: call.start_position().row as u32 + 1,
+            col: call.start_position().column as u32 + 1,
             resolvable: true,
         }),
         "selector_expression" => {
@@ -222,6 +224,8 @@ fn record_call(
             };
             f.calls.push(RawCall {
                 from_symbol: owner,
+                line: call.start_position().row as u32 + 1,
+                col: call.start_position().column as u32 + 1,
                 callee,
                 resolvable,
             });

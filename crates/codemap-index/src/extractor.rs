@@ -14,6 +14,10 @@ pub struct RawSymbol {
 pub struct RawCall {
     pub from_symbol: String,
     pub callee: String,
+    /// Where the call is written, 1-based. Needed for `--vimgrep` output to
+    /// point at the call site rather than the enclosing function.
+    pub line: u32,
+    pub col: u32,
     /// False when the call target cannot be determined from names alone
     /// (a local-variable or chained receiver). Feeds Node::unresolved_calls.
     pub resolvable: bool,

@@ -177,6 +177,8 @@ fn record_call(
         "identifier" => f.calls.push(RawCall {
             from_symbol: owner,
             callee: text(fun, src).to_string(),
+            line: call.start_position().row as u32 + 1,
+            col: call.start_position().column as u32 + 1,
             resolvable: true,
         }),
         // `self.finish()` and `x.method()` both parse as field_expression.
@@ -207,6 +209,8 @@ fn record_call(
             };
             f.calls.push(RawCall {
                 from_symbol: owner,
+                line: call.start_position().row as u32 + 1,
+                col: call.start_position().column as u32 + 1,
                 callee,
                 resolvable,
             });
@@ -218,6 +222,8 @@ fn record_call(
                 f.calls.push(RawCall {
                     from_symbol: owner,
                     callee: format!("{}.{}", text(*ty, src), text(*m, src)),
+                    line: call.start_position().row as u32 + 1,
+                    col: call.start_position().column as u32 + 1,
                     resolvable: true,
                 });
             }
