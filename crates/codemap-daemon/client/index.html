@@ -128,7 +128,7 @@ pre{margin:0;padding:10px;background:var(--surface);border:1px solid var(--line)
         <span><i style="width:7px;height:7px;background:var(--module)"></i>module</span>
         <span><i style="width:7px;height:7px;border-radius:50%;background:var(--dep)"></i>dependency</span>
         <span><i style="width:14px;height:0;border-top:1px dashed var(--dimmer);position:relative;top:-3px"></i>reachable</span>
-        <span id="hint">drag to orbit · shift-drag or arrows to pan · wheel to zoom · click to select · f follow</span>
+        <span id="hint">drag to orbit · shift-drag or arrows to pan · wheel to zoom — all around the cursor · click to select · f follow</span>
       </div>
       <div id="trail"></div>
     </div>
@@ -219,8 +219,8 @@ function computeBounds(){
   const pts=[...P.values()];
   if(!pts.length){ bounds=null; return; }
   const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y), zs=pts.map(p=>p.z);
-  const mx=Math.max(400,(Math.max(...xs)-Math.min(...xs))*0.25);
-  const my=Math.max(300,(Math.max(...ys)-Math.min(...ys))*0.25);
+  const mx=Math.max(700,(Math.max(...xs)-Math.min(...xs))*0.45);
+  const my=Math.max(500,(Math.max(...ys)-Math.min(...ys))*0.45);
   bounds={x0:Math.min(...xs)-mx, x1:Math.max(...xs)+mx,
           y0:Math.min(...ys)-my, y1:Math.max(...ys)+my,
           z0:Math.min(...zs)-600, z1:Math.max(...zs)+600};
@@ -271,6 +271,34 @@ function visibleIds(){
 }
 
 /* ================= camera ================= */
+/// Inverse of project() at the target plane's depth. Orbit and zoom pivot on
+/// the point under the cursor, so navigation goes where you are looking rather
+/// than around whatever the camera last flew to.
+function unprojectAt(sx, sy, c){
+  const f = 900/Math.max(c.dist,120);
+  const x1 = (sx - cv.clientWidth/2)/f;
+  const y1 = (sy - cv.clientHeight/2)/f;
+  const cy=Math.cos(c.yaw), sy2=Math.sin(c.yaw), cp=Math.cos(c.pitch), sp=Math.sin(c.pitch);
+  // On the target plane z2 === dist, which pins y and z1 from y1 alone.
+  const y  = y1*cp;
+  const z1 = -y1*sp;
+  const x  = x1*cy + z1*sy2;
+  const z  = -x1*sy2 + z1*cy;
+  return {x:c.tx + x, y:c.ty + y, z:c.tz + z};
+}
+
+/// Shifts the camera target so world point `p` sits under screen pixel (sx,sy)
+/// after a yaw/pitch/dist change. Anchoring to a pixel that was fixed at
+/// mousedown is what makes an orbit feel like turning the model rather than
+/// swinging the camera somewhere else.
+function anchor(p, sx, sy){
+  const after = unprojectAt(sx, sy, goal);
+  goal.tx += p.x - after.x;
+  goal.ty += p.y - after.y;
+  goal.tz += p.z - after.z;
+  clampTarget();
+}
+
 function project(p){
   const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
   let x=p.x-cam.tx, y=p.y-cam.ty, z=p.z-cam.tz;
@@ -421,7 +449,10 @@ let drag=null;
 cv.oncontextmenu=e=>e.preventDefault();
 cv.onmousedown=e=>{
   const pan=e.shiftKey||e.button===1||e.button===2;
-  drag={x:e.clientX,y:e.clientY,moved:false,pan};
+  const r=cv.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  drag={x:e.clientX,y:e.clientY,moved:false,pan,px,py,
+        pivot: unprojectAt(px,py,goal)};
   cv.style.cursor=pan?'move':'grabbing';
 };
 addEventListener('mousemove',e=>{
@@ -438,6 +469,8 @@ addEventListener('mousemove',e=>{
     clampTarget();
   } else {
     goal.yaw+=dx*.005; goal.pitch=Math.max(-.5,Math.min(1.1,goal.pitch+dy*.004));
+    // Pin the grabbed point to the pixel it was grabbed at, for the whole drag.
+    anchor(drag.pivot, drag.px, drag.py);
   }
   drag.x=e.clientX; drag.y=e.clientY; userMoved=true;
 });
@@ -452,7 +485,11 @@ cv.onmouseleave=()=>{drag=null;mouse=null;};
 cv.onwheel=e=>{
   e.preventDefault();
   if(e.ctrlKey||e.metaKey||Math.abs(e.deltaX)<1){
+    const r=cv.getBoundingClientRect();
+    mouse={x:e.clientX-r.left, y:e.clientY-r.top};
+    const before = unprojectAt(mouse.x, mouse.y, goal);
     goal.dist=Math.max(500,Math.min(6000,goal.dist*(1+e.deltaY*.0012)));
+    anchor(before, mouse.x, mouse.y);
   } else {
     const k=cam.dist/900, cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
     goal.tx-=e.deltaX*k*cy; goal.tz+=e.deltaX*k*sy; goal.ty-=e.deltaY*k;
