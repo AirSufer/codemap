@@ -189,7 +189,7 @@ fn walk(
 
 /// `@router.post("/x")` above a `def handler(...)`.
 fn route_from_decorated(n: TsNode, src: &str) -> Option<RawRoute> {
-    const METHODS: [&str; 5] = ["get", "post", "put", "patch", "delete"];
+    const METHODS: [&str; 7] = ["get", "post", "put", "patch", "delete", "websocket", "head"];
     let mut c = n.walk();
     let mut found: Option<(String, String)> = None;
     for ch in n.children(&mut c) {
