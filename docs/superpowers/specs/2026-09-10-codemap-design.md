@@ -334,6 +334,38 @@ Measured 2026-09-10 (marked M); the rest remain targets (T):
 **The spike is complete** (2026-09-10, results above). It cut lazy indexing from the design
 and corrected the call-accuracy claim downward. Spike code was throwaway and is not retained.
 
+### 17.1 End-to-end coverage (measured 2026-09-10, Python only)
+
+Running the built CLI over `core-service` (788 files, 12,434 functions):
+
+| Call sites | 79,023 | |
+|---|---|---|
+| Resolved to an in-repo node | 21,506 | 27.2% of all sites |
+| External / stdlib (callee not in repo) | 29,224 | expected, not a failure |
+| Ambiguous (name indexed, >1 candidate) | 7,664 | recoverable — see below |
+| Undeterminable (needs type inference) | 20,629 | the hard floor |
+| **Internal resolution, excluding stdlib** | | **43.2%** |
+
+**This supersedes both earlier figures.** The 69.6% from the spike and the 73.9% after the
+local-binding heuristic measured whether the extractor could *name* a callee. 43.2% is the
+share of plausibly-internal call sites that actually became an edge. The latter is the
+number that governs how good the graph is.
+
+**Reachability coverage is thin, and mostly not the tool's fault.** Only **485 of 12,434
+functions (3.9%)** are reachable from a detected route. Route detection is close to complete
+— `core-service` contains 17 route decorators and the extractor finds 14 — so the limit is
+structural: a service with 17 HTTP entry points and 12k functions simply has most of its
+code outside any request path. Call chains that do exist run up to 10 levels deep, so the
+traversal itself works.
+
+Implication for the UI: "reachable from" must render as *"no route found"*, never
+*"not reachable"*, and a per-node unresolved-call count should sit beside it.
+
+**Highest-value next improvement:** the 7,664 ambiguous call sites are names that ARE
+indexed but matched more than one symbol. The per-file import table is already extracted and
+currently unused for disambiguation; using it to prefer candidates from imported modules
+should convert a large share of these into real edges.
+
 ## 18. Risks
 
 | Risk | Mitigation |
